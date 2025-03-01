@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "HelloWorld",
-    "slug": "expo-template-default",
+    "name": "Twigs",
+    "slug": "twigs",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -9,13 +9,15 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.gorphonsil.twigs"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
-      }
+      },
+      "package": "com.gorphonsil.twigs"
     },
     "web": {
       "bundler": "metro",
@@ -36,6 +38,18 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "fc4fbda2-1239-4802-b9b6-566c85eafb69"
+      }
+    },
+    "owner": "gorphon-sil",
+    "updates": {
+      "url": "https://u.expo.dev/fc4fbda2-1239-4802-b9b6-566c85eafb69"
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
     }
   }
 }
