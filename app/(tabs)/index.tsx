@@ -1,74 +1,71 @@
-import { Image, StyleSheet, Platform } from 'react-native';
+import Button from '@/components/Button';
+import ImageViewer from '@/components/ImageViewer';
 
-import { HelloWave } from '@/components/HelloWave';
-import ParallaxScrollView from '@/components/ParallaxScrollView';
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
+import * as ImagePicker from 'expo-image-picker';
+import { Link } from 'expo-router';
+import { useState } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
 
-export default function HomeScreen() {
-  return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12'
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-        <ThemedText>
-          Tap the Explore tab to learn more about what's included in this starter app.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          When you're ready, run{' '}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+const PlaceholderImage = require('@/assets/images/sharing/places/image-5.png');
+
+export default function Index() {
+
+  const [selectedImage, setSelectedImage] = useState<string | undefined>(undefined); // Initialize useState to store selected image uri
+
+  const pickImageAsync = async () => { // Function to pick image from gallery
+    let result = await ImagePicker.launchImageLibraryAsync({ 
+      mediaTypes: ['images'],
+      allowsEditing: true, //Enables cropping (both iOS and Android)
+      quality: 1,
+    });
+
+    if (!result.canceled) { //Continue from here (if condiiton not activating?)
+      alert('Image selected.');
+      console.log("test");
+      setSelectedImage(result.assets[0].uri); // Set selected image uri to state
+      console.log(result.assets[0].uri);
+      console.log('Image selected.');
+    } else {
+      alert('You did not select any image.');
+      console.log('You did not select any image. Oh no');
+    }
+  };
+  return ( // Visible Elements
+    <View style={styles.container}>
+      <Text style={styles.text}>HOME TEST</Text>
+      <View style={styles.imageContainer}>
+        <ImageViewer imgSource={PlaceholderImage} selectedImage={selectedImage}/>
+      </View>
+      <View style={styles.footerContainer}>
+        <Button theme='primary' label="Press Me!" onPress={pickImageAsync}/>
+        <Button label="Upload Photo" />
+      </View>
+      <Link href="/about" style={styles.button}>To About Screen</Link>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
+  container: {
+    flex: 1,
+    backgroundColor: '#25292e',
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  text:{
+    color: '#fff',
+    fontSize: 20
+  },
+  button:{
+    fontSize: 20,
+    color: '#fff',
+    textDecorationLine: 'underline',
+  },
+  imageContainer: {
+    flex: 1,
+  },
+  footerContainer:{
+    flex: 1/3,
     alignItems: 'center',
-    gap: 8,
-  },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
-  },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
-  },
+  }
 });
