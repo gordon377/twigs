@@ -19,12 +19,9 @@ export default function Index() {
       quality: 1,
     });
 
-    if (!result.canceled) { //Continue from here (if condiiton not activating?)
+    if (!result.canceled) { // If image is selected
       alert('Image selected.');
-      console.log("test");
       setSelectedImage(result.assets[0].uri); // Set selected image uri to state
-      console.log(result.assets[0].uri);
-      console.log('Image selected.');
     } else {
       alert('You did not select any image.');
       console.log('You did not select any image. Oh no');
@@ -32,7 +29,7 @@ export default function Index() {
   };
   return ( // Visible Elements
     <View style={styles.container}>
-      <Text style={styles.text}>HOME TEST</Text>
+      <Text style={styles.text}>HOME TEST!</Text>
       <View style={styles.imageContainer}>
         <ImageViewer imgSource={PlaceholderImage} selectedImage={selectedImage}/>
       </View>
@@ -54,7 +51,7 @@ const styles = StyleSheet.create({
   },
   text:{
     color: '#fff',
-    fontSize: 20
+    fontSize: 20,
   },
   button:{
     fontSize: 20,

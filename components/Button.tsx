@@ -7,18 +7,18 @@ type Props = { //Customizable parts of button component
   onPress?: () => void;
 };
 
-export default function Button({ label, theme, onPress }: Props) {
+export default function Button({ label, theme, onPress }: Props) { 
   if (theme === 'primary') {
     return (
       <View
         style={[
           styles.buttonContainer,
-          { borderWidth: 4, borderColor: '#ffd33d', borderRadius: 18 },
+          //{ borderWidth: 4, borderColor: '#ffd33d', borderRadius: 18 },
         ]}>
         <Pressable
           style={[styles.button, { backgroundColor: '#fff' }]}
           onPress={onPress}>
-          <FontAwesome name="picture-o" size={18} color="#25292e" style={styles.buttonIcon} />
+          <FontAwesome size={18} color="#25292e" style={styles.buttonIcon} />
           <Text style={[styles.buttonLabel, { color: '#25292e' }]}>{label}</Text>
         </Pressable>
       </View>
@@ -36,7 +36,7 @@ export default function Button({ label, theme, onPress }: Props) {
 
 const styles = StyleSheet.create({
   buttonContainer: {
-    width: 320,
+    width: 250,
     height: 68,
     marginHorizontal: 20,
     alignItems: 'center',
