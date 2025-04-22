@@ -29,7 +29,7 @@ export default function Index() {
   };
   return ( // Visible Elements
     <View style={styles.container}>
-      <Text style={styles.text}>HOME TEST!</Text>
+      <Text style={styles.text}>HOME TEST!!</Text>
       <View style={styles.imageContainer}>
         <ImageViewer imgSource={PlaceholderImage} selectedImage={selectedImage}/>
       </View>
