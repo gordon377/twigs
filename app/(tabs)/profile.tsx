@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { StyleSheet, TextInput, View, Text } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as v from 'valibot'; //Validator Library
+import axios from 'axios'; //HTTP Client Library
 
 export default function ProfileScreen() {
   const LoginSchema = v.object({ 
@@ -19,8 +20,7 @@ export default function ProfileScreen() {
   const SignUpSchema = v.object({
     userID: v.pipe( // If using full userIDs, we need to generate a Unique ID for each user for security, similar to discord
       v.string("Invalid: Enter a string"),
-      v.nonEmpty("userID cannot be empty"),
-      v.minLength(8, "userID must be at least 8 characters"),
+      v.nonEmpty("User ID cannot be empty"),
     ),
     email: v.pipe(
       v.string("Invalid: Enter a string"),
@@ -72,9 +72,24 @@ export default function ProfileScreen() {
     console.log("Phone Number: " + phoneNum)
     console.log("Email: " + email)
     try {
+      // Parse and Validate data
       const signUpData = createProfile({userID, password, phoneNum, email})
       console.log("Parsed Data: " + signUpData)
-      setErrors([]); //Clear errors on successful validation
+
+
+      // Send parsed data to server
+      const response = await axios.post('https://twig-backend-production.railway.internal:8080/signup', signUpData);
+
+      // Handle server response
+      if(response.status === 200) {
+        const responseData = await response.data();
+        console.log("Server Response: ", responseData);
+        setErrors([]); //Clear errors on successful validation & post request
+      } else {
+        const errorData = await response.data();
+        console.log("Server Error: ", errorData);
+        setErrors([errorData.message]); //Set errors if server returns an error
+      }
     } catch (error) {
       if (error instanceof v.ValiError) { //Extract & Display Error Messages
         console.log("Validation Error: ", error.message);
