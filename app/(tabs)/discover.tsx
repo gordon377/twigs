@@ -1,14 +1,12 @@
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 export default function DiscoverScreen() {
   return (
     <View style={styles.container}>
       <Text style={styles.text}>Discover Screen</Text>
-      <TextInput>
         <Text>
           <Text style={{ fontWeight: 900 }}>Some bold text</Text>Some regular text
         </Text>
-      </TextInput>
     </View>
   );
 }

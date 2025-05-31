@@ -1,10 +1,10 @@
-import { Calendar, CalendarTheme, toDateId } from '@marceloterreiro/flash-calendar'; // Relatively new OSS for calendars called flash calendar
+import { Calendar, CalendarTheme, toDateId, useDateRange } from '@marceloterreiro/flash-calendar'; // Relatively new OSS for calendars called flash calendar
 import { useState } from 'react';
 import { Dimensions, StyleSheet, Text, View } from 'react-native';
 
 //Note: May have to look at localizing the calendar to the user's preference (date format, time zone, calendar type, etc.)
 
-const linearAccent = "#000";
+const linearAccent = "#585ABF";
 const today = toDateId(new Date());
 
 
@@ -69,9 +69,13 @@ export default function BaseCalendarList(){
 
   return (
     <View style={styles.cal}>
-      <Text>Selected date: {selectedDate}</Text>
+      <Text style={styles.text}>
+        Selected date: {selectedDate} 
+        {"\n"}
+        Selected date range: 
+      </Text>
       <Calendar.List
-        theme={linearTheme}
+        //theme={linearTheme}
         calendarInitialMonthId={today}
         calendarActiveDateRanges={[
           {
@@ -79,17 +83,34 @@ export default function BaseCalendarList(){
             endId: selectedDate,
           },
         ]}
-        onCalendarDayPress={(date) => setSelectedDate(date)}
+        onCalendarDayPress={setSelectedDate}
       />
     </View>
-  )
+  );
 }
 
+
+export const CalendarListDateRange = () => {
+  const {
+    calendarActiveDateRanges,
+    onCalendarDayPress,
+    // Also available for your convenience:
+    // dateRange, // { startId?: string, endId?: string }
+    // isDateRangeValid, // boolean
+    // onClearDateRange, // () => void
+  } = useDateRange();
+  return (
+    <Calendar.List
+      calendarActiveDateRanges={calendarActiveDateRanges}
+      onCalendarDayPress={onCalendarDayPress}
+    />
+  );
+};
 
 const styles = StyleSheet.create({
   cal: {
     flex: 1,
-    backgroundColor: linearAccent, 
+    backgroundColor: '#fff', 
     height: Dimensions.get('screen').height,
     width: Dimensions.get('screen').width,
   },
@@ -100,6 +121,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   text: {
-    color: '#fff',
+    color: '#000',
   },
 });
