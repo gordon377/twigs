@@ -1,6 +1,8 @@
-import { Calendar, CalendarTheme, toDateId, useDateRange } from '@marceloterreiro/flash-calendar'; // Relatively new OSS for calendars called flash calendar
 import { useState } from 'react';
-import { Dimensions, StyleSheet, Text, View } from 'react-native';
+import { Dimensions, StyleSheet, Text, View, Button } from 'react-native';
+import { Calendar, CalendarTheme, toDateId } from '@marceloterreiro/flash-calendar';
+import { CalendarListDateRange } from '@/components/Calendar';
+import {createMaterialTopTabNavigator} from '@react-navigation/material-top-tabs';
 
 //Note: May have to look at localizing the calendar to the user's preference (date format, time zone, calendar type, etc.)
 
@@ -64,8 +66,9 @@ const linearTheme: CalendarTheme = {
   },
 };
 
-export default function BaseCalendarList(){
+export default function CalendarScreen(){
   const [selectedDate, setSelectedDate] = useState(today);
+  const [showRange, setShowRange] = useState(false);
 
   return (
     <View style={styles.cal}>
@@ -85,34 +88,20 @@ export default function BaseCalendarList(){
         ]}
         onCalendarDayPress={setSelectedDate}
       />
+      <View style={styles.cal}>
+        <Text style={styles.text}>Date Range Picker</Text>
+        <CalendarListDateRange />
+      </View>
     </View>
   );
 }
-
-
-export const CalendarListDateRange = () => {
-  const {
-    calendarActiveDateRanges,
-    onCalendarDayPress,
-    // Also available for your convenience:
-    // dateRange, // { startId?: string, endId?: string }
-    // isDateRangeValid, // boolean
-    // onClearDateRange, // () => void
-  } = useDateRange();
-  return (
-    <Calendar.List
-      calendarActiveDateRanges={calendarActiveDateRanges}
-      onCalendarDayPress={onCalendarDayPress}
-    />
-  );
-};
 
 const styles = StyleSheet.create({
   cal: {
     flex: 1,
     backgroundColor: '#fff', 
-    height: Dimensions.get('screen').height,
-    width: Dimensions.get('screen').width,
+    height: Dimensions.get('window').height,
+    width: Dimensions.get('window').width,
   },
   container: {
     flex: 1,
