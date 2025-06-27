@@ -66,50 +66,54 @@ const linearTheme: CalendarTheme = {
   },
 };
 
-export default function CalendarScreen(){
+// Single date calendar component
+function SingleDateCalendar() {
   const [selectedDate, setSelectedDate] = useState(today);
-  const [showRange, setShowRange] = useState(false);
-
   return (
     <View style={styles.cal}>
-      <Text style={styles.text}>
-        Selected date: {selectedDate} 
-        {"\n"}
-        Selected date range: 
-      </Text>
+      <Text style={styles.text}>Selected date: {selectedDate}</Text>
       <Calendar.List
         //theme={linearTheme}
         calendarInitialMonthId={today}
         calendarActiveDateRanges={[
-          {
-            startId: selectedDate,
-            endId: selectedDate,
-          },
+          { startId: selectedDate, endId: selectedDate },
         ]}
         onCalendarDayPress={setSelectedDate}
       />
-      <View style={styles.cal}>
-        <Text style={styles.text}>Date Range Picker</Text>
-        <CalendarListDateRange />
-      </View>
     </View>
+  );
+}
+
+// Date range calendar component
+function DateRangeCalendar() {
+  return (
+    <View style={styles.cal}>
+      <Text style={styles.text}>Date Range Picker</Text>
+      <CalendarListDateRange /* theme={linearTheme} */ />
+    </View>
+  );
+}
+
+const Tab = createMaterialTopTabNavigator();
+
+export default function CalendarScreen() {
+  return (
+    <Tab.Navigator>
+      <Tab.Screen name="Single Date" component={SingleDateCalendar} />
+      <Tab.Screen name="Date Range" component={DateRangeCalendar} />
+    </Tab.Navigator>
   );
 }
 
 const styles = StyleSheet.create({
   cal: {
     flex: 1,
-    backgroundColor: '#fff', 
+    backgroundColor: '#fff',
     height: Dimensions.get('window').height,
     width: Dimensions.get('window').width,
   },
-  container: {
-    flex: 1,
-    backgroundColor: '#25292e',
-    justifyContent: "center",
-    alignItems: "center",
-  },
   text: {
     color: '#000',
+    margin: 8,
   },
 });
