@@ -3,13 +3,15 @@ import { useState } from 'react';
 import { StyleSheet, TextInput, View, Text } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as v from 'valibot'; //Validator Library
-import axios from 'axios'; //HTTP Client Library
+import type { AxiosResponse } from 'axios';
+
+const axios = require('axios').default;
 
 export default function ProfileScreen() {
   const LoginSchema = v.object({ 
-    identity: v.pipe( // Can be Phone Num, Email, or userID
+    identity: v.pipe( // Can be Phone Num, Email, or Username
       v.string("Invalid: Enter a string"),
-      v.nonEmpty("Please enter your userID, email, or phone number"),
+      v.nonEmpty("Please enter your Username, email, or phone number"),
     ),
     password: v.pipe(
       v.string("Invalid: Enter a string"),
@@ -18,7 +20,7 @@ export default function ProfileScreen() {
   });
 
   const SignUpSchema = v.object({
-    userID: v.pipe( // If using full userIDs, we need to generate a Unique ID for each user for security, similar to discord
+    username: v.pipe( // If using full names, we need to generate a Unique ID for each user for security, similar to discord
       v.string("Invalid: Enter a string"),
       v.nonEmpty("User ID cannot be empty"),
     ),
@@ -29,7 +31,6 @@ export default function ProfileScreen() {
     ),
     password: v.pipe(
       v.string("Invalid: Enter a string"),
-      v.nonEmpty("Password cannot be empty"),
       v.minLength(8, "Password must be at least 8 characters"),
       v.regex(/[a-z]/, 'Your password must contain a lowercase letter.'),
       v.regex(/[A-Z]/, 'Your password must contain a uppercase letter.'),
@@ -41,65 +42,75 @@ export default function ProfileScreen() {
     ),
   });
 
-  function createProfile(data:unknown){
+  function credentialsParse(data:unknown){
     return v.parse(SignUpSchema, data);
   }
 
-  const [userID, setUserID] = useState(""); // Initialize useState to store login variables
+  const [username, setUsername] = useState(""); // Initialize useState to store login variables
   const [password, setPassword] = useState(""); 
   const [phoneNum, setPhoneNum] = useState<number | undefined>(undefined); //Default to 0 as integer
   const [email, setEmail] = useState("");
   const [errors, setErrors] = useState<string[]>([]); // Initialize useState to store errors
 
-  const LogInAsync = async () => { // Function to save credentials
-    setUserID("");
+  function cleanUp() { // Function to clear stored values
+    setUsername("");
     setPassword("");
     setPhoneNum(undefined);
     setEmail("");
-    console.log("userID: " + userID)
+    setErrors([]);
+    }
+
+
+  const LogInAsync = async () => { // Function to save credentials
+    console.log("Username: " + username)
     console.log("Password: " + password)
     console.log("Phone Number: " + phoneNum)
     console.log("Email: " + email)
+
    };
 
    const SignUpAsync = async () => { // Function to save credentials
-    setUserID("");
-    setPassword("");
-    setPhoneNum(undefined);
-    setEmail("");
-    console.log("userID: " + userID)
+    console.log("Username: " + username)
     console.log("Password: " + password)
     console.log("Phone Number: " + phoneNum)
     console.log("Email: " + email)
+
+    // Attempt to Validate user input
     try {
-      // Parse and Validate data
-      const signUpData = createProfile({userID, password, phoneNum, email})
+      const signUpData = credentialsParse({username, password, phoneNum, email})
       console.log("Parsed Data: " + signUpData)
 
-
-      // Send parsed data to server
-      const response = await axios.post('https://twig-backend-production.railway.internal:8080/signup', signUpData);
-
-      // Handle server response
-      if(response.status === 200) {
-        const responseData = await response.data();
-        console.log("Server Response: ", responseData);
-        setErrors([]); //Clear errors on successful validation & post request
-      } else {
-        const errorData = await response.data();
-        console.log("Server Error: ", errorData);
-        setErrors([errorData.message]); //Set errors if server returns an error
-      }
     } catch (error) {
       if (error instanceof v.ValiError) { //Extract & Display Error Messages
         console.log("Validation Error: ", error.message);
         console.log("Validation Issue: ", error.issues);
+        alert("Validation Error: " + error.message);
         const errorMessages = error.issues.map((issue) => issue.message);
         setErrors(errorMessages);
       } else {
         console.log("Unexpected Error: ", error);
       }
+      return; // Stop execution if validation fails
     }
+    
+    // Send parsed data to server
+    axios.post('https://twig-production.up.railway.app/signup', {
+      email: email,
+      phone_number: phoneNum?.toString(), // Conversion to string for backend
+      password: password,
+      username: username,
+    })
+    .then(function (response: AxiosResponse) {
+      console.log("Server Response: ", response.data);
+    })
+    .catch(function(error:any) {
+      if (error.response && error.response.data) {
+        console.log("Server Error Data: ", error.response.data);
+      } else {
+        console.log("Server Error: ", error);
+      }
+    })
+    .finally(cleanUp());
    };
    
 
@@ -107,10 +118,10 @@ export default function ProfileScreen() {
     <SafeAreaView style={styles.container}>
       <TextInput
         style={styles.input}
-        onChangeText={setUserID}
-        placeholder="Unique User ID" //** Do we want a useruserID as well? */ */
+        onChangeText={setUsername}
+        placeholder="Unique User ID" //** Do we want a userUsername as well? */ */
         placeholderTextColor={'#AFAFAF'}
-        value={userID}
+        value={username}
       />
       <TextInput
         style={styles.input}
@@ -137,7 +148,7 @@ export default function ProfileScreen() {
         placeholderTextColor={'#AFAFAF'}
         value={email}
       />
-      <Text style={styles.text}>Test Input Update (userID): {userID}</Text>
+      <Text style={styles.text}>Test Input Update (Username): {username}</Text>
         <Button theme='primary' label="Log In" onPress={LogInAsync}/> 
         <Button theme='primary' label="Sign Up" onPress={SignUpAsync}/>
       {errors.length > 0 && (
