@@ -1,8 +1,0 @@
-StyleGuide for frontend development. This is a work in progress.
-
-Colors:
-    Background: #25292e
-    Grey Scale:
-        White: #fff
-        Off-White: #AFAFAF
-        Black: #000
