@@ -50,6 +50,7 @@ export default function ProfileScreen() {
   const [errors, setErrors] = useState<string[]>([]); // Initialize useState to store errors
 
   function cleanUp() { // Function to clear stored values
+    setDisplayName("");
     setUsername("");
     setPassword("");
     setPhoneNum(undefined);

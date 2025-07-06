@@ -7,6 +7,7 @@ export default function CustomInput(props: TextInputProps) {
     <TextInput
       style={[commonStyles.textInput, props.style]}
       placeholderTextColor="#AFAFAF"
+      returnKeyType='done'
       {...props}
     />
   );
