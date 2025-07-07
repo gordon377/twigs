@@ -6,10 +6,15 @@ import { StyleSheet, TextInput, View, Text } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as v from 'valibot'; //Validator Library
 import type { AxiosResponse } from 'axios';
+import * as SecureStore from 'expo-secure-store'; // For secure storage of tokens
+import { useRouter } from 'expo-router';
 
 const axios = require('axios').default;
 
 export default function ProfileScreen() {
+
+  const router = useRouter();
+
   const LoginSchema = v.object({ 
     email: v.pipe(
       v.string("Invalid: Enter a string"),
@@ -37,9 +42,50 @@ export default function ProfileScreen() {
     }
 
 
-  const LogInAsync = async () => { // Function to save credentials
-    console.log("Password: " + password)
-    console.log("Email: " + email)
+  const LogInAsync = async () => {
+    // Attempt to Validate user input
+    try {
+      const logInData = credentialsParse({email, password});
+      console.log("Parsed Data: " + logInData)
+
+    } catch (error) {
+      if (error instanceof v.ValiError) { //Extract & Display Error Messages
+        console.log("Validation Error: ", error.message);
+        console.log("Validation Issue: ", error.issues);
+        alert("Validation Error: " + error.message);
+        const errorMessages = error.issues.map((issue) => issue.message);
+        setErrors(errorMessages);
+      } else {
+        console.log("Unexpected Error: ", error);
+      }
+      return; // Stop execution if validation fails
+    }
+    
+    // Send parsed data to server
+    try {
+      const response = await axios.post('https://twig-production.up.railway.app/login', {
+        email,
+        password,
+      });
+
+      // Store tokens securely
+      await SecureStore.setItemAsync('accessToken', response.data.access_token);
+      await SecureStore.setItemAsync('refreshToken', response.data.refresh_token);
+
+      console.log("Access Token stored!");
+      console.log("Refresh Token stored!");
+
+      router.replace('/(tabs)/profile');
+      
+    } catch (error: any) {
+      if (error.response && error.response.data) {
+        console.log("Server Error Data: ", error.response.data);
+      } else {
+        console.log("Server Error: ", error);
+      }
+    } finally {
+      cleanUp();
+    }
    };
 
   return ( //Create modals to explain each of the sign up componenets (reasoning, security, etc.)
