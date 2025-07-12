@@ -1,14 +1,22 @@
 import Button from '@/components/Button';
 import CustomInput from '@/components/TextInput';
 import { useState } from 'react';
-import { StyleSheet, TextInput, View, Text } from 'react-native';
+import { StyleSheet, TextInput, View, Text, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as v from 'valibot'; //Validator Library
 import type { AxiosResponse } from 'axios';
+import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { colors } from '@/styles/styles';
 
 const axios = require('axios').default;
 
 export default function ProfileScreen() {
+  const router = useRouter();
+
+  const handleBackPress = () => {
+    router.back();
+  };
 
   const SignUpSchema = v.object({
     displayName: v.pipe( 
@@ -35,6 +43,11 @@ export default function ProfileScreen() {
     phoneNum: v.pipe(
       v.number("Must use numbers only for your Phone Number"),
     ),
+    bio: v.pipe(
+      v.string("Invalid: Enter a string"),
+      v.nonEmpty("Bio cannot be empty"),
+      v.maxLength(100, "Bio cannot be more than 100 characters"),
+    ),
   });
 
   function credentialsParse(data:unknown){
@@ -43,6 +56,7 @@ export default function ProfileScreen() {
 
   // Initialize useState to store login variables
   const [displayName, setDisplayName] = useState("");
+  const [bio, setBio] = useState("");
   const [username, setUsername] = useState(""); 
   const [password, setPassword] = useState(""); 
   const [phoneNum, setPhoneNum] = useState<number | undefined>(undefined); //Default to 0 as integer
@@ -55,11 +69,13 @@ export default function ProfileScreen() {
     setPassword("");
     setPhoneNum(undefined);
     setEmail("");
+    setBio("");
     setErrors([]);
     }
 
    const SignUpAsync = async () => { // Function to save credentials
     console.log("Display Name: " + displayName)
+    console.log("Bio: " + bio)
     console.log("Username: " + username)
     console.log("Password: " + password)
     console.log("Phone Number: " + phoneNum)
@@ -67,7 +83,7 @@ export default function ProfileScreen() {
 
     // Attempt to Validate user input
     try {
-      const signUpData = credentialsParse({displayName, username, password, phoneNum, email})
+      const signUpData = credentialsParse({displayName, bio, username, password, phoneNum, email})
       console.log("Parsed Data: " + signUpData)
 
     } catch (error) {
@@ -86,10 +102,11 @@ export default function ProfileScreen() {
     // Send parsed data to server
     axios.post('https://twig-production.up.railway.app/signup', {
       email: email,
-      phone_number: phoneNum?.toString(), // Conversion to string for backend
+      phonenumber: phoneNum?.toString(), // Conversion to string for backend
       password: password,
       username: username,
       displayname: displayName,
+      bio: bio,
     })
     .then(function (response: AxiosResponse) {
       console.log("Server Response: ", response.data);
@@ -107,7 +124,16 @@ export default function ProfileScreen() {
 
   return ( //Create modals to explain each of the sign up componenets (reasoning, security, etc.)
     <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <TouchableOpacity 
+          onPress={handleBackPress}
+          style={styles.backButton}
+        >
+          <Ionicons name="arrow-back" size={24} color={colors.white}/>
+        </TouchableOpacity>
+      </View>
       <CustomInput onChangeText={setDisplayName} placeholder="Display Name (Full Name)" value={displayName}/>
+      <CustomInput onChangeText={setBio} placeholder="Bio (A bit about yourself! | Optional)" value={bio}/>
       <CustomInput onChangeText={setEmail} placeholder="Email" value={email}/>
       <CustomInput onChangeText={setUsername} placeholder="Username" value={username}/>
       <CustomInput onChangeText={setPassword} placeholder="Password" value={password}/>
@@ -141,6 +167,18 @@ const styles = StyleSheet.create({
     backgroundColor: '#25292e',
     justifyContent: "center",
     alignItems: "center",
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 32,
+    paddingTop: 10,
+  },
+  backButton: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
   },
   text:{
     color: '#fff',

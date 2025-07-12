@@ -1,6 +1,6 @@
 import { StyleSheet } from 'react-native';
 
-export const colors = {
+export const colors = { //Default Colors (Light Mode) | Dark Mode Colors will change these colors to others
   background: '#25292e',
   white: '#fff',
   offWhite: '#AFAFAF',
@@ -23,7 +23,7 @@ export const commonStyles = StyleSheet.create({
     color: '#fff',
     borderWidth: 3,
     borderColor: '#fff',
-    padding: 10,
+    padding: 5,
   },
 });
 

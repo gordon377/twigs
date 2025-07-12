@@ -3,6 +3,8 @@ import { Dimensions, StyleSheet, Text, View, Button } from 'react-native';
 import { Calendar, CalendarTheme, toDateId } from '@marceloterreiro/flash-calendar';
 import { CalendarListDateRange } from '@/components/Calendar';
 import {createMaterialTopTabNavigator} from '@react-navigation/material-top-tabs';
+import { colors } from '@/styles/styles';
+import { custom } from 'valibot';
 
 //Note: May have to look at localizing the calendar to the user's preference (date format, time zone, calendar type, etc.)
 
@@ -66,6 +68,62 @@ const linearTheme: CalendarTheme = {
   },
 };
 
+const customThemeLight: CalendarTheme ={
+  rowMonth: {
+    content: {
+      textAlign: "left",
+      color: colors.offWhite,
+      fontWeight: "700",
+    },
+  },
+  rowWeek: {
+    container: {
+      borderBottomWidth: 1,
+      borderBottomColor: colors.offWhite,
+      borderStyle: "solid",
+    },
+  },
+  itemWeekName: { content: { color: colors.offWhite } },
+  itemDayContainer: {
+    activeDayFiller: {
+      backgroundColor: colors.darkGreen,
+    },
+  },
+  itemDay: {
+    idle: ({ isPressed, isWeekend }) => ({
+      container: {
+        backgroundColor: isPressed ? colors.darkGreen : "transparent",
+        borderRadius: 4,
+      },
+      content: {
+        color: isWeekend && !isPressed ? colors.offWhite : colors.white,
+      },
+    }),
+    today: ({ isPressed }) => ({
+      container: {
+        borderColor: colors.offWhite,
+        borderRadius: isPressed ? 4 : 30,
+        backgroundColor: isPressed ? colors.darkGreen : "transparent",
+      },
+      content: {
+        color: isPressed ? colors.white : colors.offWhite,
+      },
+    }),
+    active: ({ isEndOfRange, isStartOfRange }) => ({
+      container: {
+        backgroundColor: colors.darkGreen,
+        borderTopLeftRadius: isStartOfRange ? 4 : 0,
+        borderBottomLeftRadius: isStartOfRange ? 4 : 0,
+        borderTopRightRadius: isEndOfRange ? 4 : 0,
+        borderBottomRightRadius: isEndOfRange ? 4 : 0,
+      },
+      content: {
+        color: colors.white,
+      },
+    }),
+  },
+};
+
 // Single date calendar component
 function SingleDateCalendar() {
   const [selectedDate, setSelectedDate] = useState(today);
@@ -73,7 +131,7 @@ function SingleDateCalendar() {
     <View style={styles.cal}>
       <Text style={styles.text}>Selected date: {selectedDate}</Text>
       <Calendar.List
-        //theme={linearTheme}
+        theme={customThemeLight}
         calendarInitialMonthId={today}
         calendarActiveDateRanges={[
           { startId: selectedDate, endId: selectedDate },
@@ -98,8 +156,8 @@ const Tab = createMaterialTopTabNavigator();
 
 export default function CalendarScreen() {
   return (
-    <Tab.Navigator>
-      <Tab.Screen name="Single Date" component={SingleDateCalendar} />
+    <Tab.Navigator style={styles.screen}>
+      <Tab.Screen name="Single Date" component={SingleDateCalendar}/>
       <Tab.Screen name="Date Range" component={DateRangeCalendar} />
     </Tab.Navigator>
   );
@@ -108,12 +166,15 @@ export default function CalendarScreen() {
 const styles = StyleSheet.create({
   cal: {
     flex: 1,
-    backgroundColor: '#fff',
     height: Dimensions.get('window').height,
     width: Dimensions.get('window').width,
   },
   text: {
-    color: '#000',
+    color: colors.darkGreen,
     margin: 8,
+  },
+  screen: {
+    flex: 1,
+    backgroundColor: colors.background,
   },
 });
