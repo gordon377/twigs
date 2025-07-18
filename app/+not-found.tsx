@@ -7,7 +7,7 @@ export default function NotFoundScreen() {
         <Stack.Screen name="not-found" options={{ title: 'Page Not Found!'}} />
         <View style={styles.container}>
             <Text style={styles.text}>404 Not Found</Text>
-            <Link href="/" style={styles.button}>Go Home</Link>
+            <Text style={styles.text}>Swipe to Go Back</Text>
         </View>
     </>
   );

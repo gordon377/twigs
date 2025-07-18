@@ -7,6 +7,7 @@ import * as v from 'valibot'; //Validator Library
 import type { AxiosResponse } from 'axios';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { colors } from '@/styles/styles';
 
 const axios = require('axios').default;
@@ -14,9 +15,6 @@ const axios = require('axios').default;
 export default function ProfileScreen() {
   const router = useRouter();
 
-  const handleBackPress = () => {
-    router.back();
-  };
 
   const SignUpSchema = v.object({
     displayName: v.pipe( 
@@ -59,6 +57,7 @@ export default function ProfileScreen() {
   const [bio, setBio] = useState("");
   const [username, setUsername] = useState(""); 
   const [password, setPassword] = useState(""); 
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [phoneNum, setPhoneNum] = useState<number | undefined>(undefined); //Default to 0 as integer
   const [email, setEmail] = useState("");
   const [errors, setErrors] = useState<string[]>([]); // Initialize useState to store errors
@@ -70,6 +69,7 @@ export default function ProfileScreen() {
     setPhoneNum(undefined);
     setEmail("");
     setBio("");
+    setConfirmPassword("");
     setErrors([]);
     }
 
@@ -78,8 +78,15 @@ export default function ProfileScreen() {
     console.log("Bio: " + bio)
     console.log("Username: " + username)
     console.log("Password: " + password)
+    console.log("Confirm Password: " + confirmPassword)
     console.log("Phone Number: " + phoneNum)
     console.log("Email: " + email)
+
+    if (password !== confirmPassword) {
+      setErrors(["Passwords do not match"]);
+      alert("Passwords do not match");
+      return;
+    }
 
     // Attempt to Validate user input
     try {
@@ -125,28 +132,66 @@ export default function ProfileScreen() {
   return ( //Create modals to explain each of the sign up componenets (reasoning, security, etc.)
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
+        {/* Removed back button from header */}
+      </View>
+
+      <View style={styles.formContainer}>
+        <CustomInput
+          placeholder="Email"
+          value={email}
+          onChangeText={setEmail}
+          keyboardType="email-address"
+          autoCapitalize="none"
+        />
+        <CustomInput
+          placeholder="Password"
+          value={password}
+          onChangeText={setPassword}
+          secureTextEntry
+        />
+        <CustomInput
+          placeholder="Confirm Password"
+          value={confirmPassword} 
+          onChangeText={setConfirmPassword}
+          secureTextEntry
+        />
+        <CustomInput
+          placeholder="Phone Number"
+          value={phoneNum ? phoneNum.toString() : ""}
+          onChangeText={(value) => { 
+            if (!isNaN(Number(value))) {
+              setPhoneNum(Number(value)); //String to Num for internal processing
+            }
+            }}
+          keyboardType="phone-pad"
+        />
+        <CustomInput
+          placeholder="Username"
+          value={username}
+          onChangeText={setUsername}
+          autoCapitalize="none"
+        />
+        <CustomInput
+          placeholder="Display Name"
+          value={displayName}
+          onChangeText={setDisplayName}
+        />
+        <CustomInput
+          placeholder="Bio"
+          value={bio}
+          onChangeText={setBio}
+        />
+      
+        <Button theme='primary' label="Sign Up" onPress={SignUpAsync}/>
+        
         <TouchableOpacity 
-          onPress={handleBackPress}
-          style={styles.backButton}
+          style={styles.arrowButton} 
+          onPress={() => router.back()}
         >
-          <Ionicons name="arrow-back" size={24} color={colors.white}/>
+          <Ionicons name="arrow-back" size={20} color="#fff" />
+          <Text style={styles.arrowButtonText}>Back to Login</Text>
         </TouchableOpacity>
       </View>
-      <CustomInput onChangeText={setDisplayName} placeholder="Display Name (Full Name)" value={displayName}/>
-      <CustomInput onChangeText={setBio} placeholder="Bio (A bit about yourself! | Optional)" value={bio}/>
-      <CustomInput onChangeText={setEmail} placeholder="Email" value={email}/>
-      <CustomInput onChangeText={setUsername} placeholder="Username" value={username}/>
-      <CustomInput onChangeText={setPassword} placeholder="Password" value={password}/>
-      <CustomInput
-        onChangeText={(value) => { 
-          if (!isNaN(Number(value))) {
-            setPhoneNum(Number(value)); //String to Num for internal processing
-          }
-         }} 
-        placeholder="Phone #" //Figure out how to change this color
-        value={phoneNum ? phoneNum.toString() : ""} //Num back to string for display
-      />
-      <Button theme='primary' label="Sign Up" onPress={SignUpAsync}/>
       {errors.length > 0 && (
         <View style={styles.footerContainer}>
           {errors.map((error, index) => (
@@ -165,20 +210,25 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#25292e',
-    justifyContent: "center",
-    alignItems: "center",
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
   },
   header: {
-    flexDirection: 'row',
+    width: '100%',
+    flex: 1/3,
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 32,
-    paddingTop: 10,
+    justifyContent: 'center',
   },
-  backButton: {
+  arrowButton: {
     padding: 8,
     borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 20,
+    backgroundColor: 'transparent',
+    width: '100%',
   },
   text:{
     color: '#fff',
@@ -205,5 +255,18 @@ const styles = StyleSheet.create({
   footerContainer:{
     flex: 1/3,
     alignItems: 'center',
-  }
+  },
+  arrowButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    marginLeft: 8,
+  },
+  formContainer: {
+    width: '100%',
+    maxWidth: 400,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+    marginBottom: 20,
+  },
 });

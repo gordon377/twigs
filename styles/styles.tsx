@@ -27,3 +27,42 @@ export const commonStyles = StyleSheet.create({
   },
 });
 
+export const settingStyles = StyleSheet.create({
+  settingsDrawer: {
+        backgroundColor: '#25292e',
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
+        height: '85%',
+        padding: 20,
+  },
+  drawerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingBottom: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#333',
+  },
+  drawerTitle: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  settingsContent: {
+    marginTop: 20,
+  },
+  settingItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 15,
+    paddingHorizontal: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#333',
+  },
+  settingText: {
+    color: '#fff',
+    fontSize: 16,
+    marginLeft: 15,
+  },
+});
+

@@ -10,6 +10,7 @@ export default function TabLayout(){
                 backgroundColor: '#25292e',
             },
             headerShadowVisible: false,
+            headerShown: false,
             headerTintColor: '#fff',
             tabBarStyle: {
                 backgroundColor: '#25292e',
@@ -64,7 +65,6 @@ export default function TabLayout(){
             <Tabs.Screen 
               name="profile" 
               options={{ 
-                title: 'Profile',
                 tabBarIcon:({color, focused}) => (
                     <Ionicons name={focused ? 'person' : 'person-outline'} color={color} size= {24} />
                 ),
