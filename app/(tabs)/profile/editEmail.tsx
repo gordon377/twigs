@@ -20,7 +20,7 @@ export default function EditEmailScreen() {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: '#25292e' }}>
         <View style={settingStyles.settingsDrawer}>
-          <DrawerHeader title="Edit Profile" onBack={() => router.back()} />
+          <DrawerHeader title="Edit Email" onBack={() => router.back()} />
           <ScrollView style={settingStyles.settingsContent} contentContainerStyle={{ padding: 20 }}>
             <View style={{ alignItems: 'center', marginBottom: 20 }}>
               <Text style={styles.infoLabel}>Email</Text>

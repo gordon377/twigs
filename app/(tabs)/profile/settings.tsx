@@ -16,7 +16,7 @@ export default function SettingScreen() {
     <View style={settingStyles.settingsDrawer}>
         <DrawerHeader title="Settings" onBack={() => router.back()} />
         <ScrollView style={settingStyles.settingsContent}>
-            <TouchableOpacity style={settingStyles.settingItem} onPress={() => router.push("/(tabs)/profile/editProfile" as any)}>
+            <TouchableOpacity style={settingStyles.settingItem} onPress={() => router.push("/profile/editProfile" as any)}>
             <Ionicons name="person-outline" size={20} color="#fff" />
             <Text style={settingStyles.settingText}>Edit Profile</Text>
             <Ionicons name="chevron-forward" size={20} color="#AFAFAF" />

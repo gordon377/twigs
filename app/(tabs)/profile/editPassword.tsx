@@ -24,7 +24,7 @@ export default function EditPasswordScreen() {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: '#25292e' }}>
         <View style={settingStyles.settingsDrawer}>
-          <DrawerHeader title="Edit Profile" onBack={() => router.back()} />
+          <DrawerHeader title="Edit Password" onBack={() => router.back()} />
           <ScrollView style={settingStyles.settingsContent} contentContainerStyle={{ padding: 20 }}>
             <View style={{ alignItems: 'center', marginBottom: 20 }}>
               <Text style={styles.infoLabel}>Password</Text>
