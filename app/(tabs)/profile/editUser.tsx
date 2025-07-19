@@ -6,12 +6,15 @@ import { useState } from 'react';
 import CustomInput from '@/components/TextInput';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useProfile } from '@/contexts/ProfileContext';
+import { changeUserInfo } from '@/utils/api';
 
 export default function EditGeneralInfoScreen() {
     const router = useRouter();
-    const { profileData } = useProfile();
+    const { profileData, setProfileData, setIsLoading } = useProfile();
+    const [isChanging, setIsChanging] = useState(false);
     const [editProfileFields, setEditProfileFields] = useState({
         email: '',
+        phoneNumber: '',
         username: '',
         displayName: '',
         bio: '',
@@ -21,16 +24,7 @@ export default function EditGeneralInfoScreen() {
         <View style={settingStyles.settingsDrawer}>
           <DrawerHeader title="Edit Profile" onBack={() => router.back()} />
           <ScrollView style={settingStyles.settingsContent} contentContainerStyle={{ padding: 20 }}>
-            <Text style={styles.infoLabel}>Email: </Text>
-            <CustomInput
-              value={editProfileFields.email}
-              onChangeText={email =>
-                setEditProfileFields(prev => ({ ...prev, email }))
-              }
-              placeholder={profileData?.data?.email || 'Enter new email'}
-              keyboardType="email-address"
-              autoCapitalize="none"
-            />
+            <View style={{ alignItems: 'center', marginBottom: 20 }}>
 
             <Text style={styles.infoLabel}>Username: </Text>
             <CustomInput
@@ -40,6 +34,18 @@ export default function EditGeneralInfoScreen() {
               }
               autoCapitalize="none"
               placeholder={profileData?.username || 'Enter new username'}
+            />
+            <Text style={styles.infoLabel}>Phone Number:</Text>
+            <CustomInput
+                value={editProfileFields.phoneNumber}
+                onChangeText={phoneNum => {
+                    // Only update if the value is numeric or empty
+                    if (!isNaN(Number(phoneNum)) || phoneNum === "") {
+                        setEditProfileFields(prev => ({ ...prev, phoneNumber: phoneNum }));
+                    }
+                }}
+                keyboardType="phone-pad"
+                placeholder={profileData?.data?.phoneNumber || 'Enter new phone number'}
             />
             <Text style={styles.infoLabel}>Display Name: </Text>
             <CustomInput
@@ -61,10 +67,16 @@ export default function EditGeneralInfoScreen() {
             <Button
               title="Save Changes"
               onPress={() => {
-                alert('Save changes pressed');
+                changeUserInfo(
+                  setIsChanging,
+                  editProfileFields,
+                  setProfileData,
+                  setIsLoading
+                );
               }}
               color="#ffd33d"
             />
+            </View>
           </ScrollView>
         </View>
       </SafeAreaView>

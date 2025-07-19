@@ -124,6 +124,7 @@ export default function ProfileScreen() {
       } else {
         console.log("Server Error: ", error);
       }
+      alert("Sign-Up failed, try again");
     })
     .finally(cleanUp());
    };
