@@ -1,10 +1,11 @@
 import { StyleSheet } from 'react-native';
 
 export const colors = { //Default Colors (Light Mode) | Dark Mode Colors will change these colors to others
-  background: '#25292e',
+  background: '#fff',
   white: '#fff',
   offWhite: '#AFAFAF',
   black: '#000',
+  offBlack: '#070c1f',
   darkBrown: '#e2c19e',
   lightBrown: '#582e2d',
   darkGreen: '#3b8439',
@@ -29,7 +30,7 @@ export const commonStyles = StyleSheet.create({
 
 export const settingStyles = StyleSheet.create({
   settingsDrawer: {
-        backgroundColor: '#25292e',
+        backgroundColor: '#fff',
         borderTopLeftRadius: 20,
         borderTopRightRadius: 20,
         height: '85%',
@@ -44,7 +45,7 @@ export const settingStyles = StyleSheet.create({
     borderBottomColor: '#333',
   },
   drawerTitle: {
-    color: '#fff',
+    color: '#070c1f',
     fontSize: 20,
     fontWeight: 'bold',
   },

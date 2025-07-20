@@ -1,16 +1,16 @@
-import { StyleSheet, Text, View, Image, Button, Modal, TouchableOpacity, ScrollView } from 'react-native';
+import { StyleSheet, Text, View, Image, TouchableOpacity, ScrollView } from 'react-native';
 import React, { useState } from 'react';
 import { ActivityIndicator } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
 import { updateProfile } from '@/utils/api';
 import { useProfile } from '@/contexts/ProfileContext';
-import CustomInput from '@/components/TextInput'
 import { useRouter } from 'expo-router';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { profileData, setProfileData, isLoading, setIsLoading } = useProfile(); // Use context
+  const { profileData, setProfileData, isLoading, setIsLoading } = useProfile();
   const [modals, setModals] = useState({
     settings: false,
     editProfile: false,
@@ -52,99 +52,149 @@ export default function ProfileScreen() {
   */}
 
   return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
     <GestureDetector gesture={swipeDown}>
-      <View style={styles.container}>
-        {/* Settings Button */}
-        <TouchableOpacity 
-          style={styles.settingsButton}
-          onPress={() => router.push('/(tabs)/profile/settings' as any)} //Expo Router's type definitions are out of dat so as any is needed?
-        >
-          <Ionicons name="settings-outline" size={24} color="#fff" />
-        </TouchableOpacity>
+      <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
+        {/* Top right settings button */}
+        <View style={styles.headerRow}>
+          <View style={{ flex: 1 }} />
+          <TouchableOpacity
+            style={styles.settingsButton}
+            onPress={() => router.push('/(tabs)/profile/settings' as any)}
+          >
+            <Ionicons name="settings-outline" size={24} color="#585ABF" />
+          </TouchableOpacity>
+        </View>
 
-        <Image
-          source={{ uri: 'https://ui-avatars.com/api/?name=User&background=585ABF&color=fff&size=128' }}
-          style={styles.avatar}
-        />
-        <Text style={styles.name}>
-          {profileData?.data?.displayName || 'John Doe'}
-        </Text>
-        <Text style={styles.email}>
-          {profileData?.email || 'johndoe@email.com'}
-        </Text>
-        <View style={styles.infoContainer}>
-          <Text style={styles.infoLabel}>Bio:</Text>
-          <Text style={styles.infoText}>
-            {profileData?.data?.bio || 'This is a placeholder profile.'}
+        {/* Centered profile content */}
+        <View style={styles.centeredContent}>
+          {/* Avatar */}
+          <View style={styles.avatarContainer}>
+            <Image
+              source={{ uri: 'https://ui-avatars.com/api/?name=User&background=585ABF&color=fff&size=128' }}
+              style={styles.avatar}
+            />
+          </View>
+
+          {/* Name and Email */}
+          <Text style={styles.title}>
+            {profileData?.data?.displayName || 'John Doe'}
           </Text>
+          <Text style={styles.email}>
+            {profileData?.email || 'johndoe@email.com'}
+          </Text>
+
+          {/* Bio */}
+          <View style={styles.infoContainer}>
+            <Text style={styles.infoLabel}>Bio</Text>
+            <Text style={styles.infoText}>
+              {profileData?.data?.bio || 'This is a placeholder profile.'}
+            </Text>
+          </View>
+
+          {/* Loading Spinner */}
+          {isLoading && (
+            <ActivityIndicator size="large" color="#585ABF" style={{ marginBottom: 16 }} />
+          )}
+
+          {/* Update Profile Button */}
+          <TouchableOpacity
+            style={styles.continueButton}
+            onPress={() => updateProfile(setProfileData, setIsLoading)}
+          >
+            <Text style={styles.continueButtonText}>Update Profile</Text>
+          </TouchableOpacity>
         </View>
-        {isLoading && (
-          <ActivityIndicator size="large" color="#ffd33d" style={{ marginBottom: 16 }} />
-        )}
-        <View style={styles.buttonContainer}>
-          <Button title="Update Profile" onPress={() => updateProfile(setProfileData, setIsLoading)} color="#ffd33d" />
-        </View>
-      </View>
+      </ScrollView>
     </GestureDetector>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  scrollContainer: {
+    flexGrow: 1,
+    backgroundColor: '#fff',
+    paddingHorizontal: 24,
+    paddingTop: 48,
+    paddingBottom: 32,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    width: '100%',
+    justifyContent: 'flex-end',
+    marginBottom: 8,
+  },
+  centeredContent: {
     flex: 1,
-    backgroundColor: '#25292e',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 24,
+    minHeight: 500, // Optional: ensures vertical centering on tall screens
   },
   settingsButton: {
-    position: 'absolute',
-    top: 50,
-    right: 20,
-    padding: 10,
-    zIndex: 1,
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: '#f5f5f5',
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 2,
   },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
+  avatarContainer: {
+    marginTop: 8,
+    marginBottom: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-
   avatar: {
     width: 96,
     height: 96,
     borderRadius: 48,
-    marginBottom: 16,
     backgroundColor: '#585ABF',
+    borderWidth: 3,
+    borderColor: '#fff',
   },
-  name: {
-    color: '#fff',
-    fontSize: 24,
+  title: {
+    fontSize: 28,
     fontWeight: 'bold',
+    color: '#25292e',
     marginBottom: 4,
+    textAlign: 'center',
   },
   email: {
-    color: '#AFAFAF',
+    color: '#585ABF',
     fontSize: 16,
     marginBottom: 16,
+    textAlign: 'center',
   },
   infoContainer: {
-    backgroundColor: '#333',
+    backgroundColor: '#f5f5f5',
     borderRadius: 8,
     padding: 16,
     width: '100%',
     marginBottom: 24,
   },
   infoLabel: {
-    color: '#fff',
+    color: '#25292e',
     fontWeight: 'bold',
     marginBottom: 4,
+    fontSize: 16,
   },
   infoText: {
-    color: '#fff',
+    color: '#25292e',
+    fontSize: 15,
   },
-  buttonContainer: {
+  continueButton: {
     width: '100%',
+    backgroundColor: '#585ABF',
+    borderRadius: 8,
+    paddingVertical: 14,
+    alignItems: 'center',
     marginTop: 8,
+    marginBottom: 16,
+  },
+  continueButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 16,
   },
 });

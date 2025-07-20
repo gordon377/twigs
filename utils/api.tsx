@@ -1,20 +1,21 @@
-import axios from 'axios';
+import axios, { AxiosResponse } from 'axios';
 import * as SecureStore from 'expo-secure-store';
-import { useRouter } from 'expo-router';
-import { useProfile } from '@/contexts/ProfileContext';
+import * as v from 'valibot';
+import { logInParsed, signUpParsed } from '@/schemas/textSchemas';
 
-export const logOut = async(setIsLoggingOut: (loading: boolean) => void) => {
+// logOut
+export const logOut = async (
+  setIsLoggingOut: (loading: boolean) => void,
+  router: any
+) => {
   console.log('logOut called');
-  const router = useRouter();
 
-  if (setIsLoggingOut) {
-    setIsLoggingOut(true);
-  }
+  if (setIsLoggingOut) setIsLoggingOut(true);
 
   try {
     const token = await SecureStore.getItemAsync('accessToken');
     const refreshToken = await SecureStore.getItemAsync('refreshToken');
-    
+
     console.log('Token retrieved:', token ? 'exists' : 'null');
     console.log('Refresh token retrieved:', refreshToken ? 'exists' : 'null');
 
@@ -27,27 +28,24 @@ export const logOut = async(setIsLoggingOut: (loading: boolean) => void) => {
     console.log('Making API call...');
     const response = await axios.post(
       'https://twig-production.up.railway.app/logout',
-      {refreshToken: refreshToken},
+      { refreshToken: refreshToken },
       {
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
       }
-    )
+    );
     console.log('API call successful');
     console.log('Response data:', response.data);
-    
+
     if (response.status === 200) {
       alert('Logged out successfully');
-      // Clear tokens from SecureStore
       await SecureStore.deleteItemAsync('accessToken');
       await SecureStore.deleteItemAsync('refreshToken');
-
       console.log('Tokens cleared');
       router.replace('/');
       console.log('Back to Login');
-
     } else {
       console.log('Logout failed');
     }
@@ -60,40 +58,178 @@ export const logOut = async(setIsLoggingOut: (loading: boolean) => void) => {
     }
     throw error;
   } finally {
-    if (setIsLoggingOut) {
-      setIsLoggingOut(false);
-    }
+    if (setIsLoggingOut) setIsLoggingOut(false);
   }
-}
+};
 
+// logIn
+export const logIn = async (
+  setIsLoggingIn: (loading: boolean) => void,
+  password: string,
+  email: string,
+  setErrors: (data: any) => void,
+  setProfileData: (data: any) => void,
+  setIsLoading: (loading: boolean) => void,
+  router: any
+) => {
+  console.log("logIn: before validation");
+
+  if (setIsLoggingIn) setIsLoggingIn(true);
+
+  function cleanUp() {
+    setErrors([]);
+  }
+
+  try {
+    console.log("logIn: after validation");
+    const logInData = logInParsed({ email, password });
+    console.log("Parsed Data: " + logInData);
+  } catch (error) {
+    if (error instanceof v.ValiError) {
+      console.log("Validation Error: ", error.message);
+      console.log("Validation Issue: ", error.issues);
+      alert("Validation Error: " + error.message);
+      const errorMessages = error.issues.map((issue) => issue.message);
+      setErrors(errorMessages);
+    } else {
+      console.log("Unexpected Error: ", error);
+    }
+    if (setIsLoggingIn) setIsLoggingIn(false);
+    return;
+  }
+
+  try {
+    const response = await axios.post('https://twig-production.up.railway.app/login', {
+      email,
+      password,
+    });
+
+    await SecureStore.setItemAsync('accessToken', response.data.access_token);
+    await SecureStore.setItemAsync('refreshToken', response.data.refresh_token);
+
+    console.log("Access Token stored!");
+    console.log("Refresh Token stored!");
+
+    try {
+      await updateProfile(setProfileData, setIsLoading);
+    } catch (error) {
+      console.log('Error updating profile:', error);
+    }
+
+    router.replace('/(tabs)/profile');
+  } catch (error: any) {
+    if (error.response && error.response.data) {
+      console.log("Server Error Data: ", error.response.data);
+    } else {
+      console.log("Server Error: ", error);
+    }
+    alert("Login failed. Please check your credentials and try again.");
+  } finally {
+    cleanUp();
+    if (setIsLoggingIn) setIsLoggingIn(false);
+  }
+};
+
+export const signUp = async (
+  setIsLoggingIn: (loading: boolean) => void,
+  setIsSigningUp: (loading: boolean) => void,
+  password: string,
+  email: string,
+  displayName: string,
+  username: string,
+  bio: string,
+  phoneNumber: number | undefined,
+  setErrors: (data: any) => void,
+  setProfileData: (data: any) => void,
+  setIsLoading: (loading: boolean) => void,
+  router: any
+  ) => { // Function to save credentials
+    console.log("Display Name: " + displayName)
+    console.log("Bio: " + bio)
+    console.log("Username: " + username)
+    console.log("Password: " + password)
+    console.log("Phone Number: " + phoneNumber)
+    console.log("Email: " + email)
+
+    function cleanUp() { // Function to clear stored values
+        setErrors([]);
+        }
+    // Attempt to Validate user input
+    try {
+      const signUpData = signUpParsed({displayName, bio, username, password, phoneNumber, email})
+      console.log("Parsed Data: " + signUpData)
+
+    } catch (error) {
+      if (error instanceof v.ValiError) { //Extract & Display Error Messages
+        console.log("Validation Error: ", error.message);
+        console.log("Validation Issue: ", error.issues);
+        alert("Validation Error: " + error.message);
+        const errorMessages = error.issues.map((issue) => issue.message);
+        setErrors(errorMessages);
+      } else {
+        console.log("Unexpected Error: ", error);
+      }
+      return; // Stop execution if validation fails
+    }
+    
+    // Send parsed data to server
+    axios.post('https://twig-production.up.railway.app/signup', {
+      email: email,
+      phoneNumber: phoneNumber?.toString(), // Conversion to string for backend
+      password: password,
+      username: username,
+      displayName: displayName,
+      bio: bio,
+    })
+    .then(function (response: AxiosResponse) {
+      console.log("Server Response: ", response.data);
+      if (response.status === 200) {
+        alert("Sign-Up Successful! Logging you in now...");
+        setIsSigningUp(false);
+        setIsLoggingIn(true);
+        return logIn(setIsLoggingIn, password, email, setErrors, setProfileData, setIsLoading, router);
+      } else {
+        console.log("Sign-Up failed with status: ", response.status);
+        alert("Sign-Up failed. Please try again.");
+      }
+    })
+    .catch(function(error:any) {
+      if (error.response && error.response.data) {
+        console.log("Server Error Data: ", error.response.data);
+      } else {
+        console.log("Server Error: ", error);
+      }
+      alert("Sign-Up failed, try again");
+    })
+    .finally(cleanUp);
+   };
+
+// updateProfile
 export const updateProfile = async (
   setProfileData?: (data: any) => void,
   setIsLoading?: (loading: boolean) => void
 ) => {
   console.log('updateProfile called');
-  
-  // Set loading to true if callback provided
-  if (setIsLoading) {
-    setIsLoading(true);
-  }
-  
+
+  if (setIsLoading) setIsLoading(true);
+
   try {
     const token = await SecureStore.getItemAsync('accessToken');
     const refreshToken = await SecureStore.getItemAsync('refreshToken');
-    
+
     console.log('Token retrieved:', token ? 'exists' : 'null');
     console.log('Refresh token retrieved:', refreshToken ? 'exists' : 'null');
-    
+
     if (!token) {
       console.log('No access token found');
       if (setIsLoading) setIsLoading(false);
       return null;
     }
-    
+
     console.log('Making API call...');
     const response = await axios.post(
       'https://twig-production.up.railway.app/profile',
-      {refreshToken: refreshToken},
+      { refreshToken: refreshToken },
       {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -103,12 +239,9 @@ export const updateProfile = async (
     );
     console.log('API call successful');
     console.log('Response data:', response.data);
-    
-    // If setProfileData callback is provided, update the context
-    if (setProfileData) {
-      setProfileData(response.data);
-    }
-    
+
+    if (setProfileData) setProfileData(response.data);
+
     return response.data;
   } catch (error: any) {
     console.log('Error in updateProfile:', error);
@@ -119,13 +252,11 @@ export const updateProfile = async (
     }
     throw error;
   } finally {
-    // Set loading to false when done
-    if (setIsLoading) {
-      setIsLoading(false);
-    }
+    if (setIsLoading) setIsLoading(false);
   }
-}; 
+};
 
+// changeUserInfo
 export const changeUserInfo = async (
   setIsChanging: (loading: boolean) => void,
   editUserInfoFields: any,
@@ -133,19 +264,16 @@ export const changeUserInfo = async (
   setIsLoading: (loading: boolean) => void
 ) => {
   console.log('changeUserInfo called');
-  
-  // Set loading to true if callback provided
-  if (setIsChanging) {
-    setIsChanging(true);
-  }
-  
+
+  if (setIsChanging) setIsChanging(true);
+
   try {
     const token = await SecureStore.getItemAsync('accessToken');
     const refreshToken = await SecureStore.getItemAsync('refreshToken');
-    
+
     console.log('Token retrieved:', token ? 'exists' : 'null');
     console.log('Refresh token retrieved:', refreshToken ? 'exists' : 'null');
-    
+
     if (!token) {
       console.log('No access token found');
       if (setIsChanging) setIsChanging(false);
@@ -157,7 +285,7 @@ export const changeUserInfo = async (
       if (setIsChanging) setIsChanging(false);
       return null;
     }
-    
+
     console.log('Making API call...');
     const response = await axios.patch(
       'https://twig-production.up.railway.app/change-profile',
@@ -179,13 +307,12 @@ export const changeUserInfo = async (
     console.log('API call successful');
     console.log('Response data:', response.data);
 
-    // Instead of calling useProfile(), use the passed-in setProfileData and setIsLoading
     try {
       await updateProfile(setProfileData, setIsLoading);
     } catch (error) {
       console.log('Error updating profile:', error);
     }
-  
+
     return response.data;
   } catch (error: any) {
     console.log('Error in changeUserInfo:', error);
@@ -196,13 +323,11 @@ export const changeUserInfo = async (
     }
     throw error;
   } finally {
-    // Set loading to false when done
-    if (setIsChanging) {
-      setIsChanging(false);
-    }
+    if (setIsChanging) setIsChanging(false);
   }
-}; 
+};
 
+// changePassword
 export const changePassword = async (
   setIsChanging: (loading: boolean) => void,
   newPassword: any,
@@ -249,7 +374,6 @@ export const changePassword = async (
     console.log('API call successful');
     console.log('Response data:', response.data);
 
-    // Update Profile after changing credentials
     try {
       await updateProfile(setProfileData, setIsLoading);
     } catch (error) {
@@ -271,6 +395,7 @@ export const changePassword = async (
   }
 };
 
+// changeEmail
 export const changeEmail = async (
   setIsChanging: (loading: boolean) => void,
   newEmail: any,
@@ -317,7 +442,6 @@ export const changeEmail = async (
     console.log('API call successful');
     console.log('Response data:', response.data);
 
-    // Update Profile after changing credentials
     try {
       await updateProfile(setProfileData, setIsLoading);
     } catch (error) {

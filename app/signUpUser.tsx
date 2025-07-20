@@ -4,10 +4,12 @@ import { useState } from 'react';
 import { StyleSheet, KeyboardAvoidingView, Image, View, Text, TouchableOpacity, Platform } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as v from 'valibot';
-import { emailSchema } from '@/schemas/textSchemas';
-import { useRouter } from 'expo-router';
+import * as SecureStore from 'expo-secure-store';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { updateProfile } from '@/utils/api';
 import { useProfile } from '@/contexts/ProfileContext';
+import { displayNameSchema, usernameSchema, phoneNumSchema, bioSchema } from '@/schemas/textSchemas';
+import { logIn, signUp } from '@/utils/api';
 import { Ionicons } from '@expo/vector-icons';
 import LeafTwig from '@/assets/appIcons/leafTwig.svg';
 
@@ -17,22 +19,55 @@ export default function ProfileScreen() {
   const router = useRouter();
   const { setProfileData, setIsLoading } = useProfile();
   const insets = useSafeAreaInsets();
-  const [email, setEmail] = useState("");
   const [errors, setErrors] = useState<string[]>([]);
+  const { email, password } = useLocalSearchParams();
 
-  const handleContinue = () => {
+  const safeEmail = Array.isArray(email) ? email[0] : email ?? '';
+  const safePassword = Array.isArray(password) ? password[0] : password ?? '';
+
+  // Add state for new fields
+  const [displayName, setDisplayName] = useState('');
+  const [username, setUsername] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [bio, setBio] = useState('');
+  const [isSigningUp, setIsSigningUp] = useState(false);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+
+  const handleSignUp = async () => {
     setErrors([]);
-    if (!email) {
-      setErrors(["Email is required"]);
+    if (!displayName || !username || !phoneNumber || !bio) {
+      setErrors(["All fields are required"]);
       return;
     }
     try {
-      v.parse(emailSchema, email);
-      router.push({ pathname: '/signUpPassword', params: { email } });
+      console.log("Validating fields...");
+      v.parse(displayNameSchema, displayName);
+      console.log("Display Name is valid");
+      v.parse(usernameSchema, username);
+      console.log("Username is valid");
+      v.parse(phoneNumSchema, Number(phoneNumber));
+      console.log("Phone Number is valid");
+      v.parse(bioSchema, bio);
+      console.log("All fields are valid");
+      await signUp(
+        setIsLoggingIn,
+        setIsSigningUp,
+        safePassword,
+        safeEmail,
+        displayName,
+        username,
+        bio,
+        Number(phoneNumber),
+        setErrors,
+        setProfileData,
+        setIsLoading,
+        router
+      );
     } catch (error) {
-      setErrors(["Invalid email format"]);
+      setErrors(["Invalid input data"]);
     }
-  }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       {/* Top right avatar */}
@@ -48,34 +83,40 @@ export default function ProfileScreen() {
       </View>
       {/* Subtitle */}
       <Text style={styles.subtitle}>Create an account</Text>
-      <Text style={styles.subsubtitle}>Enter your email to sign up for this app</Text>
+      <Text style={styles.subsubtitle}>Set-Up your profile information</Text>
       {/* Form */}
       <View style={styles.formContainer}>
         <CustomInput
-          onChangeText={setEmail}
-          placeholder="email@domain.com"
-          value={email}
+          onChangeText={setDisplayName}
+          placeholder="Display Name (Full Name)"
+          value={displayName}
+          style={styles.input}
+        />
+        <CustomInput
+          onChangeText={setUsername}
+          placeholder="Username"
+          value={username}
+          style={styles.input}
+        />
+        <CustomInput
+          onChangeText={setPhoneNumber}
+          placeholder="Phone Number"
+          value={phoneNumber}
+          keyboardType="phone-pad"
+          style={styles.input}
+        />
+        <CustomInput
+          onChangeText={setBio}
+          placeholder="Bio (100 Characters Max)"
+          value={bio}
           style={styles.input}
         />
         <TouchableOpacity
           style={styles.continueButton}
-          onPress={handleContinue}
+          onPress={handleSignUp}
         >
           <Text style={styles.continueButtonText}>Continue</Text>
         </TouchableOpacity>
-        <View style={styles.divider} />
-        {/* Add this block below the social buttons */}
-        <View style={styles.loginPromptContainer}>
-          <Text style={styles.loginPromptText}>
-            Already have an account?{' '}
-            <Text
-              style={styles.loginLink}
-              onPress={() => router.push('/logIn')}
-            >
-              Log in
-            </Text>
-          </Text>
-        </View>
       </View>
       {/* Errors */}
       {errors.length > 0 && (
@@ -87,12 +128,6 @@ export default function ProfileScreen() {
           ))}
         </View>
       )}
-      {/* Disclaimer (Placeholder for now) */}
-      <Text style={styles.disclaimer}>
-        By clicking continue, you agree to our{' '}
-        <Text style={styles.link}>Terms of Service</Text> and{' '}
-        <Text style={styles.link}>Privacy Policy</Text>
-      </Text>
     </SafeAreaView>
   );
 }
@@ -151,6 +186,22 @@ const styles = StyleSheet.create({
     color: '#25292e',
     marginBottom: 24,
     textAlign: 'center',
+  },
+  requirementsBox: {
+    width: '100%',
+    backgroundColor: '#f9f9f9',
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 24,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  requirement: {
+    fontSize: 14,
+    color: '#25292e',
+    marginBottom: 8,
   },
   formContainer: {
     width: '100%',
@@ -217,18 +268,6 @@ const styles = StyleSheet.create({
     right: 24,
   },
   link: {
-    color: '#585ABF',
-    textDecorationLine: 'underline',
-  },
-  loginPromptContainer: {
-    marginTop: 16,
-    alignItems: 'center',
-  },
-  loginPromptText: {
-    fontSize: 14,
-    color: '#25292e',
-  },
-  loginLink: {
     color: '#585ABF',
     textDecorationLine: 'underline',
   },

@@ -42,6 +42,26 @@ export const signUpSchemas = v.object({
   username: usernameSchema,
   email: emailSchema,
   password: passwordSchema,
-  phoneNum: phoneNumSchema,
+  phoneNumber: phoneNumSchema,
   bio: bioSchema,
 });
+
+export function signUpParsed(data: any) {
+  return v.parse(signUpSchemas, data);
+}
+
+export const LoginSchema = v.object({
+    email: v.pipe(
+      v.string("Invalid: Enter a string"),
+      v.nonEmpty("Email cannot be empty"),
+      v.email("Please enter a valid email address"),
+    ),
+    password: v.pipe(
+      v.string("Invalid: Enter a string"),
+      v.nonEmpty("Password cannot be empty"),
+    ),
+  });
+
+export function logInParsed (data: any) {
+  return v.parse(LoginSchema, data);
+}

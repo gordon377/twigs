@@ -15,8 +15,10 @@ export default function RootLayout() {
             headerShown: false,
           }}
         >
+          <Stack.Screen name="logIn" />
           <Stack.Screen name="index" />
-          <Stack.Screen name="signup" />
+          <Stack.Screen name="signUpPassword" />
+          <Stack.Screen name="signUpUser" />
           <Stack.Screen name="+not-found" options={{ title: 'Default Error Page'}} />
           <Stack.Screen name="(tabs)" />
         </Stack>

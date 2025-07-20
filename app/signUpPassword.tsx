@@ -4,12 +4,14 @@ import { useState } from 'react';
 import { StyleSheet, KeyboardAvoidingView, Image, View, Text, TouchableOpacity, Platform } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as v from 'valibot';
-import { emailSchema } from '@/schemas/textSchemas';
-import { useRouter } from 'expo-router';
+import * as SecureStore from 'expo-secure-store';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { updateProfile } from '@/utils/api';
 import { useProfile } from '@/contexts/ProfileContext';
 import { Ionicons } from '@expo/vector-icons';
 import LeafTwig from '@/assets/appIcons/leafTwig.svg';
+import { passwordSchema } from '@/schemas/textSchemas';
+
 
 const axios = require('axios').default;
 
@@ -17,22 +19,29 @@ export default function ProfileScreen() {
   const router = useRouter();
   const { setProfileData, setIsLoading } = useProfile();
   const insets = useSafeAreaInsets();
-  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [errors, setErrors] = useState<string[]>([]);
+  const { email } = useLocalSearchParams();
 
   const handleContinue = () => {
     setErrors([]);
-    if (!email) {
-      setErrors(["Email is required"]);
+    if (!password || !confirmPassword) {
+      setErrors(["Password and confirmation are required"]);
+      return;
+    }
+    if (password !== confirmPassword) {
+      setErrors(["Passwords do not match"]);
       return;
     }
     try {
-      v.parse(emailSchema, email);
-      router.push({ pathname: '/signUpPassword', params: { email } });
+      v.parse(passwordSchema, password);
+      router.push({ pathname: '/signUpUser', params: { email, password } });
     } catch (error) {
-      setErrors(["Invalid email format"]);
+      setErrors(["Invalid password format"]);
     }
   }
+
   return (
     <SafeAreaView style={styles.container}>
       {/* Top right avatar */}
@@ -48,13 +57,28 @@ export default function ProfileScreen() {
       </View>
       {/* Subtitle */}
       <Text style={styles.subtitle}>Create an account</Text>
-      <Text style={styles.subsubtitle}>Enter your email to sign up for this app</Text>
+      <Text style={styles.subsubtitle}>Enter your secure password</Text>
+      <View style={styles.requirementsBox}>
+        <Text style={styles.requirement}>• At least 8 characters</Text>
+        <Text style={styles.requirement}>• One lowercase letter</Text>
+        <Text style={styles.requirement}>• One uppercase letter</Text>
+        <Text style={styles.requirement}>• One number</Text>
+        <Text style={styles.requirement}>• One special character</Text>
+      </View>
       {/* Form */}
       <View style={styles.formContainer}>
         <CustomInput
-          onChangeText={setEmail}
-          placeholder="email@domain.com"
-          value={email}
+          onChangeText={setPassword}
+          placeholder="Password"
+          value={password}
+          secureTextEntry
+          style={styles.input}
+        />
+        <CustomInput
+          onChangeText={setConfirmPassword}
+          placeholder="Confirm Password"
+          value={confirmPassword}
+          secureTextEntry
           style={styles.input}
         />
         <TouchableOpacity
@@ -63,19 +87,6 @@ export default function ProfileScreen() {
         >
           <Text style={styles.continueButtonText}>Continue</Text>
         </TouchableOpacity>
-        <View style={styles.divider} />
-        {/* Add this block below the social buttons */}
-        <View style={styles.loginPromptContainer}>
-          <Text style={styles.loginPromptText}>
-            Already have an account?{' '}
-            <Text
-              style={styles.loginLink}
-              onPress={() => router.push('/logIn')}
-            >
-              Log in
-            </Text>
-          </Text>
-        </View>
       </View>
       {/* Errors */}
       {errors.length > 0 && (
@@ -87,12 +98,6 @@ export default function ProfileScreen() {
           ))}
         </View>
       )}
-      {/* Disclaimer (Placeholder for now) */}
-      <Text style={styles.disclaimer}>
-        By clicking continue, you agree to our{' '}
-        <Text style={styles.link}>Terms of Service</Text> and{' '}
-        <Text style={styles.link}>Privacy Policy</Text>
-      </Text>
     </SafeAreaView>
   );
 }
@@ -151,6 +156,22 @@ const styles = StyleSheet.create({
     color: '#25292e',
     marginBottom: 24,
     textAlign: 'center',
+  },
+  requirementsBox: {
+    width: '100%',
+    backgroundColor: '#f9f9f9',
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 24,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  requirement: {
+    fontSize: 14,
+    color: '#25292e',
+    marginBottom: 8,
   },
   formContainer: {
     width: '100%',
@@ -217,18 +238,6 @@ const styles = StyleSheet.create({
     right: 24,
   },
   link: {
-    color: '#585ABF',
-    textDecorationLine: 'underline',
-  },
-  loginPromptContainer: {
-    marginTop: 16,
-    alignItems: 'center',
-  },
-  loginPromptText: {
-    fontSize: 14,
-    color: '#25292e',
-  },
-  loginLink: {
     color: '#585ABF',
     textDecorationLine: 'underline',
   },

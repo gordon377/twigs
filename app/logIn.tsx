@@ -4,35 +4,37 @@ import { useState } from 'react';
 import { StyleSheet, KeyboardAvoidingView, Image, View, Text, TouchableOpacity, Platform } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as v from 'valibot';
-import { emailSchema } from '@/schemas/textSchemas';
+import * as SecureStore from 'expo-secure-store';
 import { useRouter } from 'expo-router';
 import { updateProfile } from '@/utils/api';
 import { useProfile } from '@/contexts/ProfileContext';
 import { Ionicons } from '@expo/vector-icons';
+import { logIn } from '@/utils/api';
 import LeafTwig from '@/assets/appIcons/leafTwig.svg';
 
 const axios = require('axios').default;
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { setProfileData, setIsLoading } = useProfile();
   const insets = useSafeAreaInsets();
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [password, setPassword] = useState("");
   const [email, setEmail] = useState("");
   const [errors, setErrors] = useState<string[]>([]);
+  const { setProfileData, setIsLoading } = useProfile();
 
-  const handleContinue = () => {
-    setErrors([]);
-    if (!email) {
-      setErrors(["Email is required"]);
+  // Wrap logIn in a function to match the expected onPress signature
+  const handleLogIn = async () => {
+    setErrors([]); // Clear previous errors
+    if (isLoggingIn) return; // Prevent multiple submissions
+    console.log("Logging in with:", { email, password });
+    if (!email || !password) {
+      setErrors(["Email and password required"]);
       return;
     }
-    try {
-      v.parse(emailSchema, email);
-      router.push({ pathname: '/signUpPassword', params: { email } });
-    } catch (error) {
-      setErrors(["Invalid email format"]);
-    }
-  }
+    await logIn(setIsLoggingIn, password, email, setErrors, setProfileData, setIsLoading, router);
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       {/* Top right avatar */}
@@ -47,8 +49,8 @@ export default function ProfileScreen() {
         <Text style={styles.title}>Twigs</Text>
       </View>
       {/* Subtitle */}
-      <Text style={styles.subtitle}>Create an account</Text>
-      <Text style={styles.subsubtitle}>Enter your email to sign up for this app</Text>
+      <Text style={styles.subtitle}>Log-In to your account</Text>
+      <Text style={styles.subsubtitle}>Enter your email and password for your account</Text>
       {/* Form */}
       <View style={styles.formContainer}>
         <CustomInput
@@ -57,25 +59,28 @@ export default function ProfileScreen() {
           value={email}
           style={styles.input}
         />
+        <CustomInput
+          onChangeText={setPassword}
+          placeholder="Password"
+          value={password}
+          secureTextEntry
+          style={styles.input}
+        />
         <TouchableOpacity
           style={styles.continueButton}
-          onPress={handleContinue}
+          onPress={handleLogIn}
         >
-          <Text style={styles.continueButtonText}>Continue</Text>
+          <Text style={styles.continueButtonText}>Log-In</Text>
         </TouchableOpacity>
         <View style={styles.divider} />
-        {/* Add this block below the social buttons */}
-        <View style={styles.loginPromptContainer}>
-          <Text style={styles.loginPromptText}>
-            Already have an account?{' '}
-            <Text
-              style={styles.loginLink}
-              onPress={() => router.push('/logIn')}
-            >
-              Log in
-            </Text>
-          </Text>
-        </View>
+        <TouchableOpacity style={styles.socialButton} disabled>
+          <Ionicons name="logo-google" size={20} color="#4285F4" style={{ marginRight: 8 }} />
+          <Text style={styles.socialButtonText}>Continue with Google</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.socialButton} disabled>
+          <Ionicons name="logo-apple" size={20} color="#000" style={{ marginRight: 8 }} />
+          <Text style={styles.socialButtonText}>Continue with Apple</Text>
+        </TouchableOpacity>
       </View>
       {/* Errors */}
       {errors.length > 0 && (
@@ -87,7 +92,7 @@ export default function ProfileScreen() {
           ))}
         </View>
       )}
-      {/* Disclaimer (Placeholder for now) */}
+      {/* Disclaimer */}
       <Text style={styles.disclaimer}>
         By clicking continue, you agree to our{' '}
         <Text style={styles.link}>Terms of Service</Text> and{' '}
@@ -217,18 +222,6 @@ const styles = StyleSheet.create({
     right: 24,
   },
   link: {
-    color: '#585ABF',
-    textDecorationLine: 'underline',
-  },
-  loginPromptContainer: {
-    marginTop: 16,
-    alignItems: 'center',
-  },
-  loginPromptText: {
-    fontSize: 14,
-    color: '#25292e',
-  },
-  loginLink: {
     color: '#585ABF',
     textDecorationLine: 'underline',
   },
