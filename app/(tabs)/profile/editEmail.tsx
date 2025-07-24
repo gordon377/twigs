@@ -64,7 +64,6 @@ export default function EditEmailScreen() {
               autoCapitalize="none"
               style={styles.input}
             />
-            {error && <Text style={styles.errorText}>{error}</Text>}
             <TouchableOpacity
               style={styles.saveButton}
               onPress={handleSave}
@@ -77,6 +76,12 @@ export default function EditEmailScreen() {
               )}
             </TouchableOpacity>
           </View>
+          {/* Error message below the form container */}
+          {error && (
+            <View style={styles.footerContainer}>
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
+          )}
         </ScrollView>
       </View>
     </SafeAreaView>
@@ -145,7 +150,12 @@ const styles = StyleSheet.create({
   errorText: {
     color: '#ff6b6b',
     marginBottom: 8,
-    alignSelf: 'flex-start',
+    alignSelf: 'center',
     fontSize: 15,
+  },
+  footerContainer: {
+    width: '100%',
+    alignItems: 'center',
+    marginTop: 8,
   },
 });

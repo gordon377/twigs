@@ -290,7 +290,6 @@ export const changeUserInfo = async (
       'https://twig-production.up.railway.app/change-profile',
       {
         refreshToken: refreshToken,
-        id: editUserInfoFields.id,
         username: editUserInfoFields.username,
         displayName: editUserInfoFields.displayName,
         phoneNumber: editUserInfoFields.phoneNumber,

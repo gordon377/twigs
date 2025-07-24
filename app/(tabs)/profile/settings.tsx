@@ -36,7 +36,7 @@ export default function SettingScreen() {
             <Text style={styles.settingText}>Help & Support</Text>
             <Ionicons name="chevron-forward" size={20} color="#AFAFAF" style={styles.iconRight} />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.settingItem}>
+          <TouchableOpacity style={styles.settingItem} onPress={() => router.push("/profile/about" as any)}>
             <Ionicons name="information-circle-outline" size={20} color="#585ABF" style={styles.iconLeft} />
             <Text style={styles.settingText}>About</Text>
             <Ionicons name="chevron-forward" size={20} color="#AFAFAF" style={styles.iconRight} />

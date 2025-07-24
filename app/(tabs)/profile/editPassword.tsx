@@ -61,11 +61,6 @@ export default function EditPasswordScreen() {
               secureTextEntry
               style={styles.input}
             />
-            {passwordError && (
-              <Text style={styles.errorText}>
-                {passwordError}
-              </Text>
-            )}
             <Text style={styles.infoLabel}>Confirm Password</Text>
             <CustomInput
               placeholder="Confirm Password"
@@ -76,11 +71,6 @@ export default function EditPasswordScreen() {
               secureTextEntry
               style={styles.input}
             />
-            {confirmError && (
-              <Text style={styles.errorText}>
-                {confirmError}
-              </Text>
-            )}
             <TouchableOpacity
               style={styles.saveButton}
               onPress={handleSave}
@@ -93,6 +83,17 @@ export default function EditPasswordScreen() {
               )}
             </TouchableOpacity>
           </View>
+          {/* Error messages below the form container */}
+          {(passwordError || confirmError) && (
+            <View style={styles.footerContainer}>
+              {passwordError && (
+                <Text style={styles.errorText}>{passwordError}</Text>
+              )}
+              {confirmError && (
+                <Text style={styles.errorText}>{confirmError}</Text>
+              )}
+            </View>
+          )}
         </ScrollView>
       </View>
     </SafeAreaView>
@@ -161,7 +162,12 @@ const styles = StyleSheet.create({
   errorText: {
     color: '#ff6b6b',
     marginBottom: 8,
-    alignSelf: 'flex-start',
+    alignSelf: 'center',
     fontSize: 15,
+  },
+  footerContainer: {
+    width: '100%',
+    alignItems: 'center',
+    marginTop: 8,
   },
 });

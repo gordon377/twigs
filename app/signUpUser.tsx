@@ -63,8 +63,8 @@ export default function ProfileScreen() {
         setIsLoading,
         router
       );
-    } catch (error) {
-      setErrors(["Invalid input data"]);
+    } catch (error:any) {
+      setErrors([error.message || 'An error occurred during sign up']);
     }
   };
 
