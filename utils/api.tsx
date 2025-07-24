@@ -40,7 +40,6 @@ export const logOut = async (
     console.log('Response data:', response.data);
 
     if (response.status === 200) {
-      alert('Logged out successfully');
       await SecureStore.deleteItemAsync('accessToken');
       await SecureStore.deleteItemAsync('refreshToken');
       console.log('Tokens cleared');

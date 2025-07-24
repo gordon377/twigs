@@ -1,7 +1,7 @@
 import Button from '@/components/Button';
 import CustomInput from '@/components/TextInput';
 import { useState } from 'react';
-import { StyleSheet, KeyboardAvoidingView, Image, View, Text, TouchableOpacity, Platform } from 'react-native';
+import { StyleSheet, ActivityIndicator, View, Text, TouchableOpacity, Platform } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as v from 'valibot';
 import * as SecureStore from 'expo-secure-store';
@@ -114,8 +114,13 @@ export default function ProfileScreen() {
         <TouchableOpacity
           style={styles.continueButton}
           onPress={handleSignUp}
+          disabled={isSigningUp}
         >
+        {isSigningUp ?(
+          <ActivityIndicator color='#fff' />
+        ) : (
           <Text style={styles.continueButtonText}>Continue</Text>
+        )}
         </TouchableOpacity>
       </View>
       {/* Errors */}

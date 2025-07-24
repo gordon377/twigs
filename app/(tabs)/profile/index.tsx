@@ -92,17 +92,17 @@ export default function ProfileScreen() {
             </Text>
           </View>
 
-          {/* Loading Spinner */}
-          {isLoading && (
-            <ActivityIndicator size="large" color="#585ABF" style={{ marginBottom: 16 }} />
-          )}
-
           {/* Update Profile Button */}
           <TouchableOpacity
             style={styles.continueButton}
             onPress={() => updateProfile(setProfileData, setIsLoading)}
+            disabled={isLoading}
           >
-            <Text style={styles.continueButtonText}>Update Profile</Text>
+            {isLoading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.continueButtonText}>Update Profile</Text>
+            )}
           </TouchableOpacity>
         </View>
       </ScrollView>
