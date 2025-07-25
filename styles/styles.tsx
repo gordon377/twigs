@@ -6,11 +6,15 @@ export const colors = { //Default Colors (Light Mode) | Dark Mode Colors will ch
   offWhite: '#AFAFAF',
   black: '#000',
   offBlack: '#070c1f',
-  darkBrown: '#e2c19e',
-  lightBrown: '#582e2d',
+  lightBrown: '#e2c19e',
+  darkBrown: '#582e2d',
   darkGreen: '#3b8439',
   midGreen: '#54ab41',
   lightGreen: '#4dbe46',
+  grey: '#A9A9A9',
+  divider: '#f2f2f2',
+  inactive: '#bbb',
+  text: '#222',
 };
 
 //Default Font: Open Sans or Alt: Delius Swash Caps

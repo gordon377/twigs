@@ -70,7 +70,8 @@ export default function ProfileScreen() {
             Already have an account?{' '}
             <Text
               style={styles.loginLink}
-              onPress={() => router.push('/logIn')}
+              // onPress={() => router.push('/logIn')}
+              onPress={() => router.push('/(tabs)/profile')} // Temporary for testing
             >
               Log in
             </Text>
