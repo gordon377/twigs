@@ -1,88 +1,157 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, FlatList, StyleSheet } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import { colors } from '@/styles/styles';
 import { Calendar, CalendarTheme, toDateId } from '@marceloterreiro/flash-calendar';
+import { useEvents } from '@/hooks/useEvents';
+import { CalendarEvent, dateTimeHelpers } from '@/types/events';
 
 const router = useRouter();
 
-// Example event type
-type Event = {
-  id: string;
-  title: string;
-  startTime?: string;
-  endTime?: string;
-  location?: string;
-  invitees?: string[]; // Add invitees to the Event type
-};
-
-// Example: Replace this with your real event fetching/filtering logic
-const mockEvents: Record<string, Event[]> = {
-  '2025-07-25': [
-    { id: '1', title: 'UX Party 🎉', startTime: 'All-day', location: 'Design Studio A' },
-    { id: '2', title: 'UI Party 🍻', startTime: '2:00 PM', endTime: '5:00 PM', location: 'Conference Room B' },
-    { id: '3', title: 'Birthday!', startTime: '6:00 PM', endTime: '11:00 PM', location: 'Party Hall' },
-    { id: '4', title: 'Meeting', startTime: '9:00 AM', location: 'Office' },
-  ],
-  // Add more dates/events as needed
+export const dateHelpers = {
+  // Format a single date for display
+  formatDate: (dateString: string): string => {
+    return dateTimeHelpers.formatDateForDisplay(dateString);
+  },
 };
 
 export function EventsList({ date }: { date: string }) {
-  const navigation = useNavigation();
-  const events = mockEvents[date] || [];
+  const { 
+    getEventsForDate, 
+    isMultiDayEvent, 
+    formatDateRange,
+    formatTimeDisplay
+  } = useEvents();
+  
+  const events = getEventsForDate(date);
 
-  const handlePress = (event: Event) => {
+  const handlePress = (event: CalendarEvent) => {
     router.push(`/(tabs)/calendar/eventDetails?eventId=${event.id}`);
   };
 
-  const formatTimeDisplay = (startTime?: string, endTime?: string) => {
-    if (!startTime) return '';
-    if (startTime === 'All-day') return 'All-day';
-    if (endTime) return `${startTime} - ${endTime}`;
-    return startTime;
+  const renderEventItem = ({ item }: { item: CalendarEvent }) => {
+    const isMultiDay = isMultiDayEvent(item);
+    const isStartDate = item.startDate === date;
+    const isEndDate = item.endDate === date;
+    
+    return (
+      <TouchableOpacity
+        onPress={() => handlePress(item)}
+        style={{
+          flexDirection: 'row',
+          justifyContent: 'space-between',
+          alignItems: 'flex-start',
+          paddingVertical: 12,
+          paddingHorizontal: 8,
+          marginVertical: 2,
+          borderBottomWidth: 1,
+          borderBottomColor: colors.offWhite,
+          backgroundColor: isMultiDay ? colors.lightGreen + '20' : colors.background,
+          borderRadius: 8,
+          borderLeftWidth: 4,
+          borderLeftColor: item.hexcode || colors.darkGreen,
+        }}
+      >
+        <View style={{ flex: 1, marginRight: 12 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            {/* Color indicator */}
+            {item.hexcode && (
+              <View style={{
+                width: 12,
+                height: 12,
+                borderRadius: 6,
+                backgroundColor: item.hexcode,
+                marginRight: 8,
+              }} />
+            )}
+            
+            <Text style={{ color: colors.text, fontWeight: '600' }}>
+              {item.title}
+            </Text>
+            
+            {isMultiDay && (
+              <Text style={{ 
+                color: colors.darkGreen, 
+                fontSize: 10, 
+                marginLeft: 6,
+                backgroundColor: colors.lightGreen,
+                paddingHorizontal: 4,
+                paddingVertical: 1,
+                borderRadius: 3
+              }}>
+                {isStartDate ? 'START' : isEndDate ? 'END' : 'ONGOING'}
+              </Text>
+            )}
+          </View>
+          
+          {item.location && (
+            <Text style={{ color: colors.grey, fontSize: 12, marginTop: 2 }}>
+              📍 {item.location}
+            </Text>
+          )}
+          
+          {isMultiDay && (
+            <Text style={{ color: colors.darkGreen, fontSize: 11, marginTop: 2 }}>
+              {formatDateRange(item)}
+            </Text>
+          )}
+        </View>
+        
+        <Text style={{ color: colors.grey, fontSize: 12, minWidth: 80, textAlign: 'right' }}>
+          {formatTimeDisplay(item)}
+        </Text>
+      </TouchableOpacity>
+    );
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.background, padding: 16 }}>
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
+      {/* Date header */}
+      <View style={{ 
+        paddingHorizontal: 16, 
+        paddingVertical: 12, 
+        borderBottomWidth: 1, 
+        borderBottomColor: colors.offWhite 
+      }}>
+        <Text style={{ 
+          color: colors.text, 
+          fontSize: 18, 
+          fontWeight: '700',
+          textAlign: 'left' 
+        }}>
+          {dateHelpers.formatDate(date)}
+        </Text>
+      </View>
+
       {events.length === 0 ? (
-        <Text style={{ color: colors.text }}>No events for this date.</Text>
+        <View style={{ 
+          paddingVertical: 20, 
+          alignItems: 'center',
+          flex: 1,
+          justifyContent: 'center' 
+        }}>
+          <Text style={{ color: colors.grey, fontSize: 16 }}>
+            No events for this date.
+          </Text>
+        </View>
       ) : (
         <FlatList
           data={events}
           keyExtractor={item => item.id}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              onPress={() => handlePress(item)}
-              style={{
-                flexDirection: 'row',
-                justifyContent: 'space-between',
-                alignItems: 'flex-start',
-                paddingVertical: 12,
-                borderBottomWidth: 1,
-                borderBottomColor: colors.offWhite,
-              }}
-            >
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: colors.text, fontWeight: '600' }}>{item.title}</Text>
-                {item.location && (
-                  <Text style={{ color: colors.grey, fontSize: 12, marginTop: 2 }}>
-                    📍 {item.location}
-                  </Text>
-                )}
-              </View>
-              <Text style={{ color: colors.grey, fontSize: 12 }}>
-                {formatTimeDisplay(item.startTime, item.endTime)}
-              </Text>
-            </TouchableOpacity>
-          )}
+          showsVerticalScrollIndicator={true}
+          style={{ flex: 1 }}
+          contentContainerStyle={{ 
+            paddingHorizontal: 16,
+            paddingVertical: 8,
+            flexGrow: 1,
+          }}
+          renderItem={renderEventItem}
         />
       )}
     </View>
   );
 }
 
-// Single date calendar component
 export function SingleDateCalendar({ 
   today,
   selectedDate,
@@ -92,6 +161,8 @@ export function SingleDateCalendar({
   selectedDate: string
   setSelectedDate: (date: string) => void
 }) {
+  const { datesWithEvents } = useEvents();
+  
   return (
     <View style={styles.cal}>
       <Calendar.List
@@ -102,6 +173,10 @@ export function SingleDateCalendar({
           { startId: selectedDate, endId: selectedDate },
         ]}
         onCalendarDayPress={setSelectedDate}
+        calendarFormatLocale="en"
+        getCalendarDayFormat={(date, locale) => {
+          return date.getDate().toString();
+        }}
       />
     </View>
   );
@@ -111,9 +186,9 @@ const customThemeLight: CalendarTheme = {
   rowMonth: {
     content: {
       textAlign: "left",
-      color: colors.black, // Use your app's primary color for month labels
+      color: colors.black,
       fontWeight: "700",
-      fontSize: 18,
+      fontSize: 15,
       letterSpacing: 1,
       paddingInline: 15,
     },
@@ -121,13 +196,13 @@ const customThemeLight: CalendarTheme = {
   rowWeek: {
     container: {
       borderBottomWidth: 1,
-      borderBottomColor: colors.offWhite, // Use your divider color
+      borderBottomColor: colors.offWhite,
       borderStyle: "solid",
     },
   },
   itemWeekName: { 
     content: { 
-      color: colors.black, // Accent color for weekday names
+      color: colors.black,
       fontWeight: "600",
       fontSize: 15,
       letterSpacing: 0.5,
@@ -135,7 +210,7 @@ const customThemeLight: CalendarTheme = {
   },
   itemDayContainer: {
     activeDayFiller: {
-      backgroundColor: colors.darkGreen, // Highlight for selected range
+      backgroundColor: colors.darkGreen,
     },
   },
   itemDay: {

@@ -16,6 +16,7 @@ export default function EditPasswordScreen() {
   const [editProfileFields, setEditProfileFields] = useState({
     password: '',
     confirmPassword: '',
+    currentPassword: '',
   });
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [confirmError, setConfirmError] = useState<string | null>(null);
@@ -40,11 +41,12 @@ export default function EditPasswordScreen() {
 
     changePassword(
       setIsChanging,
+      editProfileFields.currentPassword,
       editProfileFields.password,
       setProfileData,
       setIsLoading
     );
-    setEditProfileFields({ password: '', confirmPassword: '' });
+    setEditProfileFields({ password: '', confirmPassword: '', currentPassword: '' });
   };
 
   return (
@@ -53,15 +55,22 @@ export default function EditPasswordScreen() {
         <DrawerHeader title="Edit Password" onBack={() => router.back()} />
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           <View style={styles.formContainer}>
-            <Text style={styles.infoLabel}>Password</Text>
+            <Text style={styles.infoLabel}>Current Password</Text>
             <CustomInput
-              placeholder="Password"
+              placeholder="Current Password"
+              value={editProfileFields.currentPassword}
+              onChangeText={currentPassword => setEditProfileFields(prev => ({ ...prev, currentPassword }))}
+              secureTextEntry
+              style={styles.input}
+            />
+            <Text style={styles.infoLabel}>New Password</Text>
+            <CustomInput
+              placeholder="New Password"
               value={editProfileFields.password}
               onChangeText={password => setEditProfileFields(prev => ({ ...prev, password }))}
               secureTextEntry
               style={styles.input}
             />
-            <Text style={styles.infoLabel}>Confirm Password</Text>
             <CustomInput
               placeholder="Confirm Password"
               value={editProfileFields.confirmPassword}

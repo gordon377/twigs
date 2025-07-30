@@ -71,7 +71,7 @@ export default function ProfileScreen() {
             <Text
               style={styles.loginLink}
               // onPress={() => router.push('/logIn')}
-              onPress={() => router.push('/(tabs)/profile')} // Temporary for testing
+              onPress={() => router.push('/logIn')} // Temporary for testing
             >
               Log in
             </Text>

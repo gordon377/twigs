@@ -2,6 +2,11 @@ import axios, { AxiosResponse } from 'axios';
 import * as SecureStore from 'expo-secure-store';
 import * as v from 'valibot';
 import { logInParsed, signUpParsed } from '@/schemas/textSchemas';
+import { Alert } from 'react-native';
+import { CalendarEvent, dateTimeHelpers } from '@/types/events';
+import { colors } from '@/styles/styles';
+
+{/* Profile/User Management */}
 
 // logOut
 export const logOut = async (
@@ -328,6 +333,7 @@ export const changeUserInfo = async (
 // changePassword
 export const changePassword = async (
   setIsChanging: (loading: boolean) => void,
+  currentPassword: any,
   newPassword: any,
   setProfileData: (data: any) => void,
   setIsLoading: (loading: boolean) => void
@@ -361,6 +367,7 @@ export const changePassword = async (
       {
         refreshToken: refreshToken,
         newPassword: newPassword,
+        currentPassword: currentPassword,
       },
       {
         headers: {
@@ -459,3 +466,118 @@ export const changeEmail = async (
     if (setIsChanging) setIsChanging(false);
   }
 };
+
+{/* Connection Routes */}
+
+// getConnections
+export const getConnections = async (
+  setConnectionData?: (data: any) => void,
+  setIsLoading?: (loading: boolean) => void
+) => {
+  console.log('getConnections called');
+
+  if (setIsLoading) setIsLoading(true);
+
+  try {
+    const token = await SecureStore.getItemAsync('accessToken');
+    const refreshToken = await SecureStore.getItemAsync('refreshToken');
+
+    console.log('Token retrieved:', token ? 'exists' : 'null');
+
+    if (!token) {
+      console.log('No access token found');
+      if (setIsLoading) setIsLoading(false);
+      return null;
+    }
+
+    console.log('Making API call...');
+    const response = await axios.get(
+      'https://twig-production.up.railway.app/followers',
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+      }
+    );
+    console.log('API call successful');
+    console.log('Response data:', response.data);
+
+    if (setConnectionData) setConnectionData(response.data);
+
+    return response.data;
+  } catch (error: any) {
+    console.log('Error in updateProfile:', error);
+    if (error.response && error.response.data) {
+      console.log('Server Error Data: ', error.response.data);
+    } else {
+      console.log('Server Error: ', error);
+    }
+    throw error;
+  } finally {
+    if (setIsLoading) setIsLoading(false);
+  }
+};
+
+{/* Calendar Routes */}
+
+// createEvent (runs in background)
+export const createEvent = async (rawEventData: any) => {
+  console.log('createEvent called with:', rawEventData);
+
+  try {
+    const token = await SecureStore.getItemAsync('accessToken');
+
+    console.log('Token retrieved:', token ? 'exists' : 'null');
+
+    if (!token) {
+      console.log('No access token found');
+      return { success: false, error: 'No authentication token' };
+    }
+
+    const participants = rawEventData.invitees
+
+    const cloudEventObject = {
+      name: rawEventData.title,
+      startDate: rawEventData.startDate,
+      endDate: rawEventData.endDate,
+      startTime: rawEventData.startTime,
+      endTime: rawEventData.endTime,
+      description: rawEventData.description,
+      hexcode: rawEventData.hexcode,
+      timeZone: rawEventData.timezone,
+      location: rawEventData.location,
+      calendar: rawEventData.calendar,
+    };
+
+
+    console.log('Making API call...');
+    const response = await axios.post(
+      'https://twig-production.up.railway.app/events',
+      { event: cloudEventObject, participants: participants },
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+      }
+    );
+    console.log('API call successful');
+    console.log('Response data:', response.data);
+
+    return { success: true, data: response.data };
+  } catch (error: any) {
+    console.log('Error in createEventOnServer:', error);
+    if (error.response && error.response.data) {
+      console.log('Server Error Data: ', error.response.data);
+    } else {
+      console.log('Server Error: ', error);
+    }
+    return { 
+      success: false, 
+      error: error.response?.data?.message || 'Failed to create event on server' 
+    };
+  }
+};
+
+

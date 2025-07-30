@@ -31,7 +31,7 @@ export default function TabLayout(){
               options={{ 
                 title: 'Discover',
                 tabBarIcon:({color, focused}) => (
-                    <Ionicons name={focused ? 'compass' : 'compass'} color={color} size= {24} />
+                    <Ionicons name={focused ? 'compass' : 'compass-outline'} color={color} size= {24} />
                 ),
               }} 
             />
@@ -40,7 +40,7 @@ export default function TabLayout(){
               options={{ 
                 title: 'Calendar',
                 tabBarIcon:({color, focused}) => (
-                    <Ionicons name={focused ? 'calendar' : 'calendar'} color={color} size= {24} />
+                    <Ionicons name={focused ? 'calendar' : 'calendar-outline'} color={color} size= {24} />
                 ),
               }} 
             />
@@ -49,7 +49,7 @@ export default function TabLayout(){
               options={{ 
                 title: 'Network',
                 tabBarIcon:({color, focused}) => (
-                    <Ionicons name={focused ? 'git-network-sharp' : 'git-network-sharp'} color={color} size= {24} />
+                    <Ionicons name={focused ? 'git-network-outline' : 'git-network-outline'} color={color} size= {24} />
                 ),
               }} 
             />

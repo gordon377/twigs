@@ -37,7 +37,6 @@ export default function Index() {
         <Button theme='primary' label="Press Me!" onPress={pickImageAsync}/>
         <Button label="Upload Photo" />
       </View>
-      <Link href="/about" style={styles.button}>To About Screen</Link>
     </View>
   );
 }

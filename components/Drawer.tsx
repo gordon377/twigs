@@ -1,59 +1,57 @@
 import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import fontAwesome from '@expo/vector-icons/FontAwesome';
-import { settingStyles } from '@/styles/styles';
+import { commonStyles, colors } from '@/styles/styles';
 
 export const DrawerHeader = ({ title, onBack } : {title: string; onBack: () => void }) => (
-    <View style={settingStyles.drawerHeader}>
-      <TouchableOpacity onPress={onBack}>
-        <Ionicons name="arrow-back" size={24} color="#070c1f" />
-      </TouchableOpacity>
-      <Text style={settingStyles.drawerTitle}>{title}</Text>
-      <View style={{ width: 24 }} /> {/* Spacer for alignment */}
-    </View>
-  );
+  <View style={commonStyles.drawerHeader}>
+    <TouchableOpacity 
+      onPress={onBack}
+      style={commonStyles.headerButton}
+    >
+      <Ionicons name="arrow-back" size={24} color={colors.offBlack} />
+    </TouchableOpacity>
+    <Text style={commonStyles.drawerTitle}>{title}</Text>
+    <View style={{ width: 24 }} /> {/* Spacer for alignment */}
+  </View>
+);
 
 export const CalendarHeader = ({
+  title,
   leftAction,
   rightActions = [],
 }: {
+  title: string;
   leftAction?: { icon: React.ReactNode; onPress: () => void };
   rightActions?: { icon: React.ReactNode; onPress: () => void }[];
 }) => (
-  <View
-    style={[
-      settingStyles.drawerHeader,
-      {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: 8,
-        height: 56,
-        position: 'relative',
-      },
-    ]}
-  >
+  <View style={commonStyles.calendarHeader}>
     {/* Left Icon */}
-    {leftAction && (
+    {leftAction ? (
       <TouchableOpacity
         onPress={leftAction.onPress}
-        style={{ paddingHorizontal: 4, height: 56, justifyContent: 'center', zIndex: 1 }}
+        style={[commonStyles.headerButton, { zIndex: 1 }]}
       >
         {leftAction.icon}
       </TouchableOpacity>
+    ) : (
+      <View style={{ width: 44 }} /> // Placeholder for alignment
     )}
+    {/* Title */}
+    <Text style={commonStyles.calendarTitle}>{title}</Text>
+    
     {/* Right Icons */}
-    <View style={{ flexDirection: 'row', alignItems: 'center', height: 56, zIndex: 1 }}>
+    <View style={[commonStyles.headerButtonGroup, { zIndex: 1 }]}>
       {rightActions.map((action, idx) => (
         <TouchableOpacity
           key={idx}
           onPress={action.onPress}
-          style={{
-            marginLeft: idx === 0 ? 0 : 4,
-            paddingHorizontal: 4,
-            height: 56,
-            justifyContent: 'center',
-          }}
+          style={[
+            commonStyles.headerButton,
+            {
+              marginLeft: idx === 0 ? 0 : 8, // 8px spacing between buttons
+            }
+          ]}
         >
           {action.icon}
         </TouchableOpacity>
