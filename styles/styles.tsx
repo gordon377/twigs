@@ -176,6 +176,55 @@ export const commonStyles = StyleSheet.create({
     alignItems: 'center',
     height: SIZES.header,
   },
+  
+  
+  // ✅ Dropdown Menu Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    justifyContent: 'flex-start',
+    alignItems: 'flex-end',
+    paddingTop: 60,
+    paddingRight: 16,
+  },
+  dropdownContainer: {
+    marginTop: 60, // Adjust based on your header height
+    marginRight: 16,
+  },
+  dropdownMenu: {
+    backgroundColor: colors.cardBackground,
+    borderRadius: 12,
+    minWidth: 200,
+    maxWidth: '80%',
+    shadowColor: colors.black,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+  },
+  dropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.cardBorder,
+  },
+  dropdownItemLast: {
+    borderBottomWidth: 0, // Remove border from last item
+  },
+  dropdownIcon: {
+    marginRight: 12,
+    width: 20, // Fixed width for alignment
+  },
+  dropdownText: {
+    fontSize: 16,
+    color: colors.text,
+    fontWeight: '500',
+    flex: 1,
+  },
 });
 
 // Responsive breakpoints

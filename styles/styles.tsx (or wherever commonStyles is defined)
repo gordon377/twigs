@@ -1,0 +1,62 @@
+import { StyleSheet } from 'react-native';
+import { colors } from './path-to-your-colors-file';
+
+const styles = StyleSheet.create({
+  // ...existing styles...
+
+  // ✅ UPDATE: Dropdown positioning styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    justifyContent: 'flex-start',
+    alignItems: 'flex-end',
+    paddingTop: 60, // ✅ ADD: Safe area padding
+    paddingRight: 16, // ✅ ADD: Right margin
+  },
+
+  dropdownContainer: {
+    // ✅ REMOVE: marginTop and marginRight (now handled by modalOverlay padding)
+  },
+
+  dropdownMenu: {
+    backgroundColor: colors.cardBackground,
+    borderRadius: 12,
+    minWidth: 200,
+    maxWidth: 280, // ✅ ADD: Prevent menu from being too wide
+    shadowColor: colors.black,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+  },
+
+  dropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.cardBorder,
+    minHeight: 50, // ✅ ADD: Ensure minimum touch target
+  },
+
+  dropdownItemLast: {
+    borderBottomWidth: 0,
+  },
+
+  dropdownIcon: {
+    marginRight: 12,
+    width: 20,
+  },
+
+  dropdownText: {
+    fontSize: 16,
+    color: colors.text,
+    fontWeight: '500',
+    flex: 1,
+  },
+});
+
+export default styles;

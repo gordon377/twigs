@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Dimensions, StyleSheet, Text, View, Animated, Easing, PanResponder } from 'react-native';
+import { Dimensions, StyleSheet, Text, View, Animated, Easing, PanResponder, Modal, TouchableOpacity } from 'react-native';
 import { Calendar, CalendarTheme, toDateId } from '@marceloterreiro/flash-calendar';
-import { colors } from '@/styles/styles';
+import { colors, commonStyles } from '@/styles/styles';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CalendarHeader } from '@/components/Drawer';
 import { EventsList, SingleDateCalendar } from '@/components/Calendar';
@@ -12,64 +12,6 @@ import { router } from 'expo-router';
 // Get screen dimensions and listen for changes
 const getDimensions = () => Dimensions.get('window');
 
-const linearAccent = "#585ABF";
-
-const linearTheme: CalendarTheme = {
-  rowMonth: {
-    content: {
-      textAlign: "left",
-      color: "rgba(255, 255, 255, 0.5)",
-      fontWeight: "700",
-    },
-  },
-  rowWeek: {
-    container: {
-      borderBottomWidth: 1,
-      borderBottomColor: "rgba(255, 255, 255, 0.1)",
-      borderStyle: "solid",
-    },
-  },
-  itemWeekName: { content: { color: "rgba(255, 255, 255, 0.5)" } },
-  itemDayContainer: {
-    activeDayFiller: {
-      backgroundColor: linearAccent,
-    },
-  },
-  itemDay: {
-    idle: ({ isPressed, isWeekend }) => ({
-      container: {
-        backgroundColor: isPressed ? linearAccent : "transparent",
-        borderRadius: 4,
-      },
-      content: {
-        color: isWeekend && !isPressed ? "rgba(255, 255, 255, 0.5)" : "#ffffff",
-      },
-    }),
-    today: ({ isPressed }) => ({
-      container: {
-        borderColor: "rgba(255, 255, 255, 0.5)",
-        borderRadius: isPressed ? 4 : 30,
-        backgroundColor: isPressed ? linearAccent : "transparent",
-      },
-      content: {
-        color: isPressed ? "#ffffff" : "rgba(255, 255, 255, 0.5)",
-      },
-    }),
-    active: ({ isEndOfRange, isStartOfRange }) => ({
-      container: {
-        backgroundColor: linearAccent,
-        borderTopLeftRadius: isStartOfRange ? 4 : 0,
-        borderBottomLeftRadius: isStartOfRange ? 4 : 0,
-        borderTopRightRadius: isEndOfRange ? 4 : 0,
-        borderBottomRightRadius: isEndOfRange ? 4 : 0,
-      },
-      content: {
-        color: "#ffffff",
-      },
-    }),
-  },
-};
-
 function monthIncrement(today: any, increment: number) {
   const next = new Date(today);
   next.setMonth(next.getMonth() + increment);
@@ -79,6 +21,45 @@ function monthIncrement(today: any, increment: number) {
 export default function CalendarScreen() {
   const today = toDateId(new Date());
   const [selectedDate, setSelectedDate] = useState(today);
+  const [showOptionsDropdown, setShowOptionsDropdown] = useState(false);
+
+  // Dropdown menu options
+  const optionsMenuItems = [
+    {
+      id: '1',
+      title: 'Back to Today',
+      icon: 'today-outline',
+      onPress: () => {
+        setShowOptionsDropdown(false);
+          //FIGURE THIS OUT
+        Animated.timing(new Animated.Value(0), {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: false,
+        }).start(() => {
+          setSelectedDate(today); // Set date after animation completes
+        });
+      }
+    },
+    {
+      id: '2',
+      title: 'Calendars',
+      icon: 'ellipse-outline',
+      onPress: () => {
+        setShowOptionsDropdown(false);
+        router.push(`/(tabs)/calendar/manageCalendars`);
+      }
+    },
+    {
+      id: '3',
+      title: 'Misc',
+      icon: 'chevron-forward-outline',
+      onPress: () => {
+        setSelectedDate(monthIncrement(selectedDate, 1));
+        setShowOptionsDropdown(false);
+      }
+    }
+  ];
   
   const { getEventsForDate, hasEventsOnDate, isLoadingEvents } = useEvents();
   
@@ -224,7 +205,7 @@ export default function CalendarScreen() {
   const rightActions = [
     {
       icon: <Ionicons name="options-outline" size={24} color="#070c1f" />,
-      onPress: () => { /* handle options (viewing) */ },
+      onPress: () => { setShowOptionsDropdown(true); },
     },
     {
       icon: <Ionicons name="search" size={24} color="#070c1f" />,
@@ -296,6 +277,43 @@ export default function CalendarScreen() {
           </View>
         </Animated.View>
       </View>
+
+      {/* Options Dropdown Modal */}
+      <Modal
+        visible={showOptionsDropdown}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowOptionsDropdown(false)}
+      >
+        <TouchableOpacity 
+          style={commonStyles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowOptionsDropdown(false)}
+        >
+          <View style={commonStyles.dropdownContainer}>
+            <View style={commonStyles.dropdownMenu}>
+              {optionsMenuItems.map((item, index) => (
+                <TouchableOpacity
+                  key={item.id}
+                  style={[
+                    commonStyles.dropdownItem,
+                    index === optionsMenuItems.length - 1 && commonStyles.dropdownItemLast
+                  ]}
+                  onPress={item.onPress}
+                >
+                  <Ionicons 
+                    name={item.icon as any} 
+                    size={20} 
+                    color={colors.text} 
+                    style={commonStyles.dropdownIcon}
+                  />
+                  <Text style={commonStyles.dropdownText}>{item.title}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 }

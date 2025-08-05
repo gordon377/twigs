@@ -1,14 +1,18 @@
 import { useMemo } from 'react';
 import { CalendarEvent, dateTimeHelpers } from '@/types/events';
-import { useEvents as useEventsContext } from '@/contexts/EventsContext';
+import { useEventsContext } from '@/contexts/EventsContext';
 import { colors } from '@/styles/styles';
 
 export const useEvents = () => {
   const { 
-    events, 
+    events,
+    calendars, // ✅ NEW: Access to calendars
     addEvent, 
     updateEvent, 
-    deleteEvent, 
+    deleteEvent,
+    addCalendar, // ✅ NEW: Calendar CRUD
+    updateCalendar,
+    deleteCalendar,
     getEventsInRange, 
     getEventsForDate,
     isLoadingEvents // ✅ Updated from isLoading
@@ -132,14 +136,26 @@ export const useEvents = () => {
     };
   }, [events]);
 
+  // ✅ NEW: Calendar utilities
+  const getCalendarById = (id: string) => calendars.find(cal => cal.id === id);
+  const getEventsByCalendar = (calendarId: string) => events.filter(event => event.calendarId === calendarId);
+
   return {
     // Data and CRUD operations from context
     events,
+    calendars, // ✅ NEW
     addEvent,
     updateEvent,
     deleteEvent,
+    addCalendar, // ✅ NEW
+    updateCalendar, // ✅ NEW
+    deleteCalendar, // ✅ NEW
     getEventsInRange,
-    isLoadingEvents, // ✅ Updated from isLoading
+    isLoadingEvents,
+    
+    // Calendar utilities
+    getCalendarById,
+    getEventsByCalendar,
     
     // Computed values for UI
     getEventsForDate: (date: string) => eventsLookup[date] || [],
@@ -169,8 +185,8 @@ export const createCalendarEventObject = (rawEventData: any): CalendarEvent => {
   return {
     id: `event-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
     title: rawEventData.title || '',
-    startDate: rawEventData.startDate || dateTimeHelpers.getTodayString(),
-    endDate: rawEventData.endDate || dateTimeHelpers.getTodayString(),
+    startDate: rawEventData.startDate || dateTimeHelpers.getTodayStringInTimezone(),
+    endDate: rawEventData.endDate || dateTimeHelpers.getTodayStringInTimezone(),
     startTime: rawEventData.startTime || null,
     endTime: rawEventData.endTime || null,
     description: rawEventData.description || '',

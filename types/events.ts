@@ -1,3 +1,9 @@
+export interface Calendar {
+  id: string;
+  name: string;
+  hexcode: string;
+}
+
 export type CalendarEvent = {
   id: string;
   title: string;
@@ -50,15 +56,33 @@ export const dateTimeHelpers = {
   // ✅ Get current date in user's timezone
   getTodayStringInTimezone: (timezone?: string): string => {
     const tz = timezone || dateTimeHelpers.getUserTimezone();
-    const date = new Date();
+    const now = new Date();
     
     try {
-      // Create date in specific timezone
-      const dateInTz = new Date(date.toLocaleString('en-US', { timeZone: tz }));
-      return dateInTz.toISOString().split('T')[0];
+      // Get the date parts in the specific timezone
+      const formatter = new Intl.DateTimeFormat('en-CA', { 
+        timeZone: tz,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      });
+      
+      const parts = formatter.formatToParts(now);
+      const year = parts.find(part => part.type === 'year')?.value;
+      const month = parts.find(part => part.type === 'month')?.value;
+      const day = parts.find(part => part.type === 'day')?.value;
+      
+      const result = `${year}-${month}-${day}`;
+      console.log('Current date in timezone:', result);
+      return result;
     } catch (error) {
-      // Fallback to UTC if timezone is invalid
-      return date.toISOString().split('T')[0];
+      // Fallback to local date if timezone is invalid
+      console.error('Invalid timezone, using local date:', error);
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
     }
   },
 
@@ -70,11 +94,6 @@ export const dateTimeHelpers = {
   // Create time string in HH:MM:SS format
   formatTimeForStorage: (date: Date): string => {
     return date.toTimeString().split(' ')[0];
-  },
-
-  // Get current date in YYYY-MM-DD format (UTC)
-  getTodayString: (): string => {
-    return new Date().toISOString().split('T')[0];
   },
 
   // Parse date string to Date object

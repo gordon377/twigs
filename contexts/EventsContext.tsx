@@ -5,8 +5,20 @@ import { CalendarEvent, dateTimeHelpers } from '@/types/events';
 // Open database
 const db = SQLite.openDatabaseSync('events.db');
 
-// Initialize database tables with proper constraints
+// Initialize database with calendars table
 const initDatabase = async () => {
+  // Create calendars table first
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS calendars (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL UNIQUE,
+      hexcode TEXT NOT NULL CHECK(hexcode GLOB '#[0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f]'),
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  // ✅ UPDATED: Events table with foreign key to calendars
   await db.execAsync(`
     CREATE TABLE IF NOT EXISTS events (
       id TEXT PRIMARY KEY,
@@ -16,52 +28,73 @@ const initDatabase = async () => {
       startTime TEXT CHECK(startTime IS NULL OR startTime GLOB '[0-9][0-9]:[0-9][0-9]:[0-9][0-9]'),
       endTime TEXT CHECK(endTime IS NULL OR endTime GLOB '[0-9][0-9]:[0-9][0-9]:[0-9][0-9]'),
       description TEXT,
-      hexcode TEXT CHECK(hexcode IS NULL OR hexcode GLOB '#[0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f]'),
       timezone TEXT NOT NULL,
       location TEXT,
-      calendar TEXT NOT NULL,
       invitees TEXT,
-      calendarId TEXT,
+      calendarId TEXT NOT NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       CHECK(startDate <= endDate),
-      CHECK(startTime IS NULL OR endTime IS NULL OR startTime <= endTime)
+      CHECK(startTime IS NULL OR endTime IS NULL OR startTime <= endTime),
+      FOREIGN KEY (calendarId) REFERENCES calendars(id) ON DELETE CASCADE
     );
   `);
 
-  await db.execAsync(`
-    CREATE INDEX IF NOT EXISTS idx_events_date 
-    ON events(startDate, endDate);
+  // Insert default calendar if none exists
+  await db.runAsync(`
+    INSERT OR IGNORE INTO calendars (id, name, hexcode) 
+    VALUES ('1', 'Default', '#007AFF')
   `);
 
+  // Create indexes
   await db.execAsync(`
-    CREATE INDEX IF NOT EXISTS idx_events_time 
-    ON events(startTime, endTime);
+    CREATE INDEX IF NOT EXISTS idx_events_date ON events(startDate, endDate);
+  `);
+  await db.execAsync(`
+    CREATE INDEX IF NOT EXISTS idx_events_calendar ON events(calendarId);
+  `);
+  await db.execAsync(`
+    CREATE INDEX IF NOT EXISTS idx_calendars_name ON calendars(name);
   `);
 };
 
+// ✅ NEW: Calendar type
+export type Calendar = {
+  id: string;
+  name: string;
+  hexcode: string;
+};
+
+// ✅ UPDATED: Context interface
 interface EventsContextType {
   events: CalendarEvent[];
+  calendars: Calendar[];
   setEvents: (events: CalendarEvent[]) => void;
+  setCalendars: (calendars: Calendar[]) => void;
   addEvent: (event: CalendarEvent) => Promise<boolean>;
   updateEvent: (id: string, updates: Partial<CalendarEvent>) => Promise<boolean>;
   deleteEvent: (id: string) => Promise<boolean>;
+  addCalendar: (calendar: Omit<Calendar, 'id'>) => Promise<Calendar | null>;
+  updateCalendar: (id: string, updates: Partial<Calendar>) => Promise<boolean>;
+  deleteCalendar: (id: string) => Promise<boolean>;
   getEventsInRange: (startDate: string, endDate: string) => Promise<CalendarEvent[]>;
   getEventsForDate: (date: string) => CalendarEvent[];
-  isLoadingEvents: boolean; // ✅ Renamed from isLoading
-  setIsLoadingEvents: (loading: boolean) => void; // ✅ Renamed from setIsLoading
+  isLoadingEvents: boolean;
+  setIsLoadingEvents: (loading: boolean) => void;
 }
 
 const EventsContext = createContext<EventsContextType | undefined>(undefined);
 
 export function EventsProvider({ children }: { children: ReactNode }) {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [calendars, setCalendars] = useState<Calendar[]>([]);
   const [isLoadingEvents, setIsLoadingEvents] = useState(true); // ✅ Renamed state
 
   useEffect(() => {
     const initialize = async () => {
       try {
         await initDatabase();
+        await loadCalendarsFromDB();
         await loadEventsFromDB();
       } catch (error) {
         console.error('Failed to initialize database:', error);
@@ -72,10 +105,33 @@ export function EventsProvider({ children }: { children: ReactNode }) {
     initialize();
   }, []);
 
+  // ✅ NEW: Load calendars from database
+  const loadCalendarsFromDB = async () => {
+    try {
+      const result = await db.getAllAsync('SELECT * FROM calendars ORDER BY name ASC') as any[];
+      
+      const dbCalendars: Calendar[] = result.map((row: any) => ({
+        id: row.id,
+        name: row.name,
+        hexcode: row.hexcode,
+      }));
+      
+      setCalendars(dbCalendars);
+    } catch (error) {
+      console.error('Failed to load calendars:', error);
+    }
+  };
+
+  // ✅ UPDATED: Load events with calendar info
   const loadEventsFromDB = async () => {
     setIsLoadingEvents(true); // ✅ Updated function call
     try {
-      const result = await db.getAllAsync('SELECT * FROM events ORDER BY startDate ASC, startTime ASC') as any[];
+      const result = await db.getAllAsync(`
+        SELECT e.*, c.name as calendarName, c.hexcode 
+        FROM events e 
+        JOIN calendars c ON e.calendarId = c.id 
+        ORDER BY e.startDate ASC, e.startTime ASC
+      `) as any[];
       
       const dbEvents: CalendarEvent[] = result.map((row: any) => ({
         id: row.id,
@@ -85,12 +141,12 @@ export function EventsProvider({ children }: { children: ReactNode }) {
         startTime: row.startTime,
         endTime: row.endTime,
         description: row.description || undefined,
-        hexcode: row.hexcode || undefined,
-        timezone: row.timezone || undefined,
+        hexcode: row.hexcode, // From calendar
+        timezone: row.timezone,
         location: row.location || undefined,
-        calendar: row.calendar || undefined,
+        calendar: row.calendarName, // From calendar
         invitees: row.invitees ? JSON.parse(row.invitees) : undefined,
-        calendarId: row.calendarId || undefined, // Added calendarId property
+        calendarId: row.calendarId,
       }));
       
       setEvents(dbEvents);
@@ -100,6 +156,81 @@ export function EventsProvider({ children }: { children: ReactNode }) {
       setIsLoadingEvents(false); // ✅ Updated function call
     }
   };
+
+  // ✅ NEW: Calendar CRUD operations
+  const addCalendar = useCallback(async (calendar: Omit<Calendar, 'id'>): Promise<Calendar | null> => {
+    const newId = `calendar_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    try {
+      await db.runAsync(
+        'INSERT INTO calendars (id, name, hexcode) VALUES (?, ?, ?)',
+        [newId, calendar.name, calendar.hexcode]
+      );
+      
+      const newCalendar: Calendar = { id: newId, ...calendar };
+      setCalendars(prev => [...prev, newCalendar].sort((a, b) => a.name.localeCompare(b.name)));
+      
+      return newCalendar;
+    } catch (error) {
+      console.error('Failed to add calendar:', error);
+      return null;
+    }
+  }, []);
+
+  const updateCalendar = useCallback(async (id: string, updates: Partial<Calendar>): Promise<boolean> => {
+    const updateFields: string[] = [];
+    const updateValues: any[] = [];
+    
+    Object.entries(updates).forEach(([key, value]) => {
+      if (key !== 'id' && value !== undefined) {
+        updateFields.push(`${key} = ?`);
+        updateValues.push(value);
+      }
+    });
+
+    if (updateFields.length === 0) return true;
+
+    try {
+      await db.runAsync(
+        `UPDATE calendars SET ${updateFields.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+        [...updateValues, id]
+      );
+      
+      setCalendars(prev => prev.map(cal => 
+        cal.id === id ? { ...cal, ...updates } : cal
+      ).sort((a, b) => a.name.localeCompare(b.name)));
+      
+      // ✅ Also update events that use this calendar
+      await loadEventsFromDB();
+      
+      return true;
+    } catch (error) {
+      console.error('Failed to update calendar:', error);
+      return false;
+    }
+  }, []);
+
+  const deleteCalendar = useCallback(async (id: string): Promise<boolean> => {
+    if (id === 'default') {
+      console.error('Cannot delete default calendar');
+      return false;
+    }
+
+    try {
+      // Events will be automatically deleted due to CASCADE
+      await db.runAsync('DELETE FROM calendars WHERE id = ?', [id]);
+      
+      setCalendars(prev => prev.filter(cal => cal.id !== id));
+      
+      // Reload events to reflect changes
+      await loadEventsFromDB();
+      
+      return true;
+    } catch (error) {
+      console.error('Failed to delete calendar:', error);
+      return false;
+    }
+  }, []);
 
   // Validate event data before database operations
   const validateEvent = (event: Partial<CalendarEvent>): string[] => {
@@ -141,7 +272,15 @@ export function EventsProvider({ children }: { children: ReactNode }) {
     return errors;
   };
 
+  // ✅ UPDATED: Add event with calendar validation
   const addEvent = useCallback(async (event: CalendarEvent): Promise<boolean> => {
+    // Validate that calendar exists
+    const calendar = calendars.find(cal => cal.id === event.calendarId);
+    if (!calendar) {
+      console.error('Calendar not found:', event.calendarId);
+      return false;
+    }
+
     // Validate event data
     const validationErrors = validateEvent(event);
     if (validationErrors.length > 0) {
@@ -150,11 +289,10 @@ export function EventsProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      // ✅ FIXED: Include calendarId in the INSERT statement
       await db.runAsync(
         `INSERT INTO events (id, title, startDate, endDate, startTime, endTime, 
-         description, hexcode, timezone, location, calendar, invitees, calendarId) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         description, timezone, location, invitees, calendarId) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           event.id,
           event.title,
@@ -163,16 +301,21 @@ export function EventsProvider({ children }: { children: ReactNode }) {
           event.startTime,
           event.endTime,
           event.description || null,
-          event.hexcode || null,
-          event.timezone, // ✅ Required timezone
+          event.timezone,
           event.location || null,
-          event.calendar, // ✅ Required calendar
           event.invitees ? JSON.stringify(event.invitees) : null,
-          event.calendarId || null, // ✅ ADDED: calendarId parameter
+          event.calendarId,
         ]
       );
       
-      setEvents(prev => [...prev, event].sort((a, b) => {
+      // ✅ Event object includes calendar data
+      const eventWithCalendar: CalendarEvent = {
+        ...event,
+        calendar: calendar.name,
+        hexcode: calendar.hexcode,
+      };
+      
+      setEvents(prev => [...prev, eventWithCalendar].sort((a, b) => {
         if (a.startDate !== b.startDate) {
           return a.startDate.localeCompare(b.startDate);
         }
@@ -187,7 +330,7 @@ export function EventsProvider({ children }: { children: ReactNode }) {
       console.error('Failed to add event:', error);
       return false;
     }
-  }, []);
+  }, [calendars]);
 
   const updateEvent = useCallback(async (id: string, updates: Partial<CalendarEvent>): Promise<boolean> => {
     // Validate updates
@@ -307,10 +450,15 @@ export function EventsProvider({ children }: { children: ReactNode }) {
 
   const contextValue: EventsContextType = {
     events,
+    calendars,
     setEvents,
+    setCalendars,
     addEvent,
     updateEvent,
     deleteEvent,
+    addCalendar,
+    updateCalendar,
+    deleteCalendar,
     getEventsInRange,
     getEventsForDate,
     isLoadingEvents, // ✅ Updated property name
@@ -324,7 +472,7 @@ export function EventsProvider({ children }: { children: ReactNode }) {
   );
 }
 
-export function useEvents() {
+export function useEventsContext() {
   const context = useContext(EventsContext);
   if (!context) {
     throw new Error('useEvents must be used within EventsProvider');
