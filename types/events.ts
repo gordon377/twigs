@@ -56,33 +56,35 @@ export const dateTimeHelpers = {
 
   // ✅ Get current date in user's timezone
   getTodayStringInTimezone: (timezone?: string): string => {
-    const tz = timezone || dateTimeHelpers.getUserTimezone();
-    const now = new Date();
-    
     try {
-      // Get the date parts in the specific timezone
-      const formatter = new Intl.DateTimeFormat('en-CA', { 
-        timeZone: tz,
+      const now = new Date();
+      
+      // If no timezone specified, use simple local date
+      if (!timezone) {
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      }
+      
+      // For specific timezone, use Intl.DateTimeFormat
+      const formatter = new Intl.DateTimeFormat('sv-SE', { // Swedish locale gives YYYY-MM-DD
+        timeZone: timezone,
         year: 'numeric',
         month: '2-digit',
         day: '2-digit'
       });
       
-      const parts = formatter.formatToParts(now);
-      const year = parts.find(part => part.type === 'year')?.value;
-      const month = parts.find(part => part.type === 'month')?.value;
-      const day = parts.find(part => part.type === 'day')?.value;
-      
-      const result = `${year}-${month}-${day}`;
-      console.log('Current date in timezone:', result);
-      return result;
+      const dateStr = formatter.format(now);
+      console.log('Current date in timezone:', dateStr, 'for timezone:', timezone);
+      return dateStr;
     } catch (error) {
-      // Fallback to local date if timezone is invalid
+      // Fallback to UTC date
       console.error('Invalid timezone, using local date:', error);
-      const today = new Date();
-      const year = today.getFullYear();
-      const month = String(today.getMonth() + 1).padStart(2, '0');
-      const day = String(today.getDate()).padStart(2, '0');
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
       return `${year}-${month}-${day}`;
     }
   },

@@ -581,3 +581,62 @@ export const createEvent = async (rawEventData: any) => {
 };
 
 
+export const updateEvent = async (rawEventData: any) => {
+  console.log('updateEvent called with:', rawEventData);
+
+  try {
+    const token = await SecureStore.getItemAsync('accessToken');
+
+    console.log('Token retrieved:', token ? 'exists' : 'null');
+
+    if (!token) {
+      console.log('No access token found');
+      return { success: false, error: 'No authentication token' };
+    }
+
+    const participants = rawEventData.invitees
+
+    const cloudEventObject = {
+      name: rawEventData.title,
+      startDate: rawEventData.startDate,
+      endDate: rawEventData.endDate,
+      startTime: rawEventData.startTime,
+      endTime: rawEventData.endTime,
+      description: rawEventData.description,
+      hexcode: rawEventData.hexcode,
+      timeZone: rawEventData.timezone,
+      location: rawEventData.location,
+      calendar: rawEventData.calendar,
+    };
+
+
+    console.log('Making API call...');
+    const response = await axios.put(
+      `https://twig-production.up.railway.app/events/${rawEventData.id}`,
+      { eventData: cloudEventObject },
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+      }
+    );
+    console.log('API call successful');
+    console.log('Response data:', response.data);
+
+    return { success: true, data: response.data };
+  } catch (error: any) {
+    console.log('Error in createEventOnServer:', error);
+    if (error.response && error.response.data) {
+      console.log('Server Error Data: ', error.response.data);
+    } else {
+      console.log('Server Error: ', error);
+    }
+    return { 
+      success: false, 
+      error: error.response?.data?.message || 'Failed to create event on server' 
+    };
+  }
+};
+
+
