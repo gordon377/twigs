@@ -204,4 +204,93 @@ export const dateTimeHelpers = {
     'Pacific/Auckland',      // NZDT/NZST
     'UTC'                    // Coordinated Universal Time
   ] as const,
+
+  // ✅ Auto-correct date/time for common issues
+  autoCorrectDateTime: (
+    startDate: string,
+    startTime: string | null,
+    endDate: string,
+    endTime: string | null,
+    shouldCorrect: boolean = true
+  ): { 
+    startDate: string; 
+    startTime: string | null; 
+    endDate: string; 
+    endTime: string | null;
+    corrected: boolean;
+    reason?: string;
+  } => {
+    if (!shouldCorrect) {
+      return { 
+        startDate, 
+        startTime, 
+        endDate, 
+        endTime, 
+        corrected: false 
+      };
+    }
+
+    let correctedStartDate = startDate;
+    let correctedEndDate = endDate;
+    let correctedStartTime = startTime;
+    let correctedEndTime = endTime;
+    let reason = '';
+
+    // If end date is before start date, swap them
+    if (endDate && startDate && new Date(endDate) < new Date(startDate)) {
+      correctedStartDate = endDate;
+      correctedEndDate = startDate;
+      correctedStartTime = endTime;
+      correctedEndTime = startTime;
+      reason = 'End date was before start date - dates were swapped';
+    }
+
+    // If same date and end time is before start time, adjust end time
+    if (correctedStartDate === correctedEndDate && 
+        correctedStartTime && correctedEndTime &&
+        correctedStartTime > correctedEndTime) {
+      // Add 1 hour to start time for end time
+      const startDateTime = new Date(`${correctedStartDate}T${correctedStartTime}`);
+      startDateTime.setHours(startDateTime.getHours() + 1);
+      correctedEndTime = dateTimeHelpers.formatTimeForStorage(startDateTime);
+      reason = 'End time was before start time - added 1 hour to end time';
+    }
+
+    const hasChanges = (
+      correctedStartDate !== startDate ||
+      correctedStartTime !== startTime ||
+      correctedEndDate !== endDate ||
+      correctedEndTime !== endTime
+    );
+
+    return {
+      startDate: correctedStartDate,
+      startTime: correctedStartTime,
+      endDate: correctedEndDate,
+      endTime: correctedEndTime,
+      corrected: hasChanges,
+      reason: hasChanges ? reason : undefined
+    };
+  },
+
+  // In types/events.ts - Add this function to dateTimeHelpers
+  suggestEndTime: (startTime: string): string => {
+    try {
+      const [hours, minutes] = startTime.split(':').map(Number);
+      const startDate = new Date();
+      startDate.setHours(hours, minutes, 0, 0);
+      
+      // Add 1 hour by default
+      const endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
+      
+      // If it goes past midnight, cap at 23:59
+      if (endDate.getDate() !== startDate.getDate()) {
+        return '23:59:00';
+      }
+      
+      return dateTimeHelpers.formatTimeForStorage(endDate);
+    } catch (error) {
+      return '23:59:00';
+    }
+  },
 };

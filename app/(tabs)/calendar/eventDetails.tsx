@@ -9,7 +9,7 @@ import { colors } from '@/styles/styles';
 import { CalendarHeader } from '@/components/Drawer';
 import { CalendarEvent } from '@/types/events';
 import { useEvents } from '@/hooks/useEvents';
-import { updateEvent as updateEventAPI } from '@/utils/api'; // Rename the import
+import { updateEvent as updateEventAPI, deleteEvent as deleteEventAPI } from '@/utils/api'; // Rename the import
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { EventForm } from '@/components/EventForm/EventForm';
 
@@ -18,7 +18,7 @@ export default function EventDetailsScreen() {
   const { eventId } = useLocalSearchParams<{ eventId: string }>();
   const { 
     events, 
-    deleteEvent, 
+    deleteEvent: deleteEventLocal, 
     updateEvent: updateEventLocal, // Rename to avoid conflict
     getRemoteCalendarId,
     getLocalCalendarId,
@@ -144,11 +144,16 @@ export default function EventDetailsScreen() {
           onPress: async () => {
             setIsDeleting(true);
             try {
-              const success = await deleteEvent(event.id);
-              if (success) {
+              const apiResponse = await deleteEventAPI(event.id);
+              const success = await deleteEventLocal(event.id);
+              if (success && apiResponse.success) {
                 router.back();
-              } else {
-                Alert.alert('Error', 'Failed to delete event');
+              } 
+              else if (!apiResponse.success) {
+                Alert.alert('Error', `Failed to delete event: ${apiResponse.error || 'Unknown error'}`);
+              } 
+              else if (!success) {
+                Alert.alert('Error', 'Failed to delete event locally');
               }
             } catch (error) {
               console.error('Delete error:', error);

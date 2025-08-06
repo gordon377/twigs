@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useImperativeHandle, forwardRef } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, StyleSheet } from 'react-native';
+import React, { useState, useEffect, useImperativeHandle, forwardRef, useCallback } from 'react';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, StyleSheet, Animated, Alert } from 'react-native';
 import { colors } from '@/styles/styles';
 import { CalendarEvent, dateTimeHelpers } from '@/types/events';
 import { useEvents } from '@/hooks/useEvents';
@@ -69,8 +69,101 @@ export const EventForm = forwardRef<any, EventFormProps>(({
     }
   }, [initialData]);
 
+  // ✅ NEW: Auto-correction state
+  const [lastCorrection, setLastCorrection] = useState<{
+    message: string;
+    timestamp: number;
+  } | null>(null);
+
+  // ✅ NEW: Auto-correct function with user feedback
+  const autoCorrectDateTimes = useCallback((
+    startDate: string,
+    startTime: string | null,
+    endDate: string,
+    endTime: string | null,
+    showAlert: boolean = true
+  ) => {
+    const correction = dateTimeHelpers.autoCorrectDateTime(
+      startDate, startTime, endDate, endTime, isAllDay
+    );
+
+    if (correction.corrected) {
+      // Update the form data
+      setEventData(prev => ({
+        ...prev,
+        startDate: correction.startDate,
+        endDate: correction.endDate,
+        startTime: correction.startTime,
+        endTime: correction.endTime,
+      }));
+
+      // Show user-friendly notification
+      if (showAlert) {
+        setLastCorrection({
+          message: correction.reason || 'Date/time automatically corrected',
+          timestamp: Date.now()
+        });
+
+        // Clear notification after 4 seconds
+        setTimeout(() => setLastCorrection(null), 4000);
+      }
+
+      return true;
+    }
+    return false;
+  }, [isAllDay]);
+
+  // ✅ NEW: Enhanced updateEventData with auto-correction
   const updateEventData = (field: keyof CalendarEvent, value: any) => {
-    setEventData(prev => ({ ...prev, [field]: value }));
+    setEventData(prev => {
+      const newData = { ...prev, [field]: value };
+
+      // Auto-correct when date/time fields change
+      if (['startDate', 'endDate', 'startTime', 'endTime'].includes(field)) {
+        // Small delay to avoid correction loops
+        setTimeout(() => {
+          autoCorrectDateTimes(
+            newData.startDate || '',
+            (newData.startTime ?? null) as string | null,
+            newData.endDate || '',
+            (newData.endTime ?? null) as string | null,
+            true // Show alert
+          );
+        }, 100);
+      }
+
+      return newData;
+    });
+  };
+
+  // ✅ NEW: Smart time adjustment when start time changes
+  const handleTimeChange = (type: 'start' | 'end', value: string) => {
+    if (type === 'start') {
+      updateEventData('startTime', value);
+      
+      // Auto-suggest end time if not set or if end time is before start time
+      const currentEndTime = eventData.endTime;
+      if (!currentEndTime || value >= currentEndTime) {
+        const suggestedEndTime = dateTimeHelpers.suggestEndTime(value);
+        setTimeout(() => updateEventData('endTime', suggestedEndTime), 50);
+      }
+    } else {
+      updateEventData('endTime', value);
+    }
+  };
+
+  // ✅ NEW: Smart date adjustment
+  const handleDateChange = (type: 'start' | 'end', value: string) => {
+    if (type === 'start') {
+      updateEventData('startDate', value);
+      
+      // If end date is before start date, update it
+      if (eventData.endDate && value > eventData.endDate) {
+        setTimeout(() => updateEventData('endDate', value), 50);
+      }
+    } else {
+      updateEventData('endDate', value);
+    }
   };
 
   const handleAllDayToggle = () => {
@@ -96,6 +189,27 @@ export const EventForm = forwardRef<any, EventFormProps>(({
   };
 
   const handleSubmit = async () => {
+    // ✅ Final validation and correction before submit
+    const finalCorrection = autoCorrectDateTimes(
+      eventData.startDate || '',
+      eventData.startTime ?? null,
+      eventData.endDate || '',
+      eventData.endTime ?? null,
+      false // Don't show alert for final validation
+    );
+
+    // Basic validation
+    if (!eventData.title?.trim()) {
+      Alert.alert('Error', 'Event title is required');
+      return;
+    }
+
+    if (!eventData.startDate) {
+      Alert.alert('Error', 'Start date is required');
+      return;
+    }
+
+    // Submit the corrected data
     await onSubmit(eventData);
   };
 
@@ -114,6 +228,14 @@ export const EventForm = forwardRef<any, EventFormProps>(({
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
+      {/* ✅ NEW: Correction notification */}
+      {lastCorrection && (
+        <Animated.View style={styles.correctionNotification}>
+          <Ionicons name="checkmark-circle" size={16} color={colors.success} />
+          <Text style={styles.correctionText}>{lastCorrection.message}</Text>
+        </Animated.View>
+      )}
+
       <ScrollView 
         style={styles.scrollView} 
         showsVerticalScrollIndicator={false}
@@ -157,7 +279,7 @@ export const EventForm = forwardRef<any, EventFormProps>(({
           </View>
         </FormCard>
 
-        {/* Date/Time Picker */}
+        {/* Date/Time Picker with smart handlers */}
         <FormCard>
           <EventDateTimePicker
             startDate={eventData.startDate || ''}
@@ -165,8 +287,8 @@ export const EventForm = forwardRef<any, EventFormProps>(({
             startTime={eventData.startTime ?? undefined}
             endTime={eventData.endTime ?? undefined}
             isAllDay={isAllDay}
-            onDateChange={(type, value) => updateEventData(type === 'start' ? 'startDate' : 'endDate', value)}
-            onTimeChange={(type, value) => updateEventData(type === 'start' ? 'startTime' : 'endTime', value)}
+            onDateChange={handleDateChange} // ✅ Use smart handler
+            onTimeChange={handleTimeChange} // ✅ Use smart handler
           />
         </FormCard>
 
@@ -230,9 +352,18 @@ export const EventForm = forwardRef<any, EventFormProps>(({
 
 // Add new styles for compact settings rows
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  scrollView: { flex: 1 },
-  scrollContent: { paddingBottom: 24 },
+  container: { 
+    flex: 1,
+    paddingTop: 20, // ✅ Add this line - space from header
+  },
+  scrollView: { 
+    flex: 1,
+    paddingHorizontal: 0, // ✅ Add this line - keep horizontal padding at 0
+  },
+  scrollContent: { 
+    paddingTop: 12,    // ✅ Add this line - additional top padding for first form card
+    paddingBottom: 24, // This line already exists
+  },
   
   // Inputs
   titleInput: { fontSize: 20, color: colors.text, fontWeight: '600', minHeight: 28 },
@@ -274,4 +405,25 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1, shadowRadius: 3, elevation: 2,
   },
   toggleIndicatorActive: { alignSelf: 'flex-end' },
+
+  // ✅ NEW: Styles for correction notification
+  correctionNotification: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: colors.successLight,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginHorizontal: 16,
+    marginTop: 8,
+    borderRadius: 8,
+    borderLeftWidth: 4,
+    borderLeftColor: colors.success,
+  },
+  correctionText: {
+    fontSize: 14,
+    color: colors.success,
+    fontWeight: '600',
+    flex: 1,
+  },
 });
