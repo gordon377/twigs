@@ -6,16 +6,21 @@ import { colors } from '@/styles/styles';
 export const useEvents = () => {
   const { 
     events,
-    calendars, // ✅ NEW: Access to calendars
+    calendars,
     addEvent, 
     updateEvent, 
     deleteEvent,
-    addCalendar, // ✅ NEW: Calendar CRUD
+    addCalendar,
     updateCalendar,
     deleteCalendar,
     getEventsInRange, 
     getEventsForDate,
-    isLoadingEvents // ✅ Updated from isLoading
+    isLoadingEvents,
+    // ✅ ADD: Helper functions from context
+    getRemoteCalendarId,
+    getLocalCalendarId,
+    getCalendarByName,
+    syncCalendarMapping,
   } = useEventsContext();
 
   // Pre-compute events lookup table
@@ -143,15 +148,21 @@ export const useEvents = () => {
   return {
     // Data and CRUD operations from context
     events,
-    calendars, // ✅ NEW
+    calendars,
     addEvent,
     updateEvent,
     deleteEvent,
-    addCalendar, // ✅ NEW
-    updateCalendar, // ✅ NEW
-    deleteCalendar, // ✅ NEW
+    addCalendar,
+    updateCalendar,
+    deleteCalendar,
     getEventsInRange,
     isLoadingEvents,
+    
+    // ✅ ADD: Helper functions
+    getRemoteCalendarId,
+    getLocalCalendarId,
+    getCalendarByName,
+    syncCalendarMapping,
     
     // Calendar utilities
     getCalendarById,
@@ -164,12 +175,11 @@ export const useEvents = () => {
     datesWithEvents,
     formatTimeDisplay,
     formatDateRange,
-
     
     // Helper functions
     isMultiDayEvent: (event: CalendarEvent) => event.endDate !== event.startDate,
     
-    // ✅ Timezone utilities
+    // Timezone utilities
     getUserTimezone: dateTimeHelpers.getUserTimezone,
     isValidTimezone: dateTimeHelpers.isValidTimezone,
     commonTimezones: dateTimeHelpers.commonTimezones,

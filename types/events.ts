@@ -1,8 +1,9 @@
-export interface Calendar {
+export type Calendar = {
   id: string;
+  remoteId?: number; // ✅ ADD: Remote ID for API mapping
   name: string;
   hexcode: string;
-}
+};
 
 export type CalendarEvent = {
   id: string;

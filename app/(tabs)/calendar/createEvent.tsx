@@ -16,10 +16,16 @@ import { createEvent } from '@/utils/api';
 export default function CreateEventScreen() {
   const router = useRouter();
   const { selectedDate } = useLocalSearchParams<{ selectedDate?: string }>();
-  const { addEvent, calendars, getUserTimezone, commonTimezones } = useEvents();
-
-  console.log('selectedDate:', selectedDate);
-  console.log('getTodayStringInTimezone:', dateTimeHelpers.getTodayStringInTimezone());
+  const { 
+    addEvent, 
+    calendars, 
+    getUserTimezone, 
+    commonTimezones,
+    getRemoteCalendarId, // ✅ NOW AVAILABLE
+    getLocalCalendarId,  // ✅ NOW AVAILABLE
+    getCalendarByName,   // ✅ NOW AVAILABLE
+    syncCalendarMapping  // ✅ NOW AVAILABLE
+  } = useEvents();
   
   // Core state
   const [eventData, setEventData] = useState<Partial<CalendarEvent>>({
@@ -50,10 +56,13 @@ export default function CreateEventScreen() {
   // Animation values
   const modalAnimations = {
     opacity: useRef(new Animated.Value(0)).current,
-    translateY: useRef(new Animated.Value(300)).current,
+    translateY: useRef(new Animated.Value(300)).current, // Start offscreen
   };
 
   // Initialize calendar selection
+
+  const calendarInitialized = useRef(false);
+
   useEffect(() => {
     if (calendars.length > 0 && !eventData.calendarId) {
       const defaultCalendar = calendars.find(cal => cal.id === '1') || calendars[0];
@@ -64,9 +73,10 @@ export default function CreateEventScreen() {
           hexcode: defaultCalendar.hexcode,
           calendarId: defaultCalendar.id
         }));
+        calendarInitialized.current = true;
       }
     }
-  }, [calendars, eventData.calendarId]);
+  }, [calendars.length]);
 
   // Helper functions
   const updateEventData = (field: keyof CalendarEvent, value: any) => {
@@ -115,16 +125,49 @@ export default function CreateEventScreen() {
   // Modal controls
   const openModal = (type: keyof typeof modals) => {
     setModals(prev => ({ ...prev, [type]: true }));
-    if (type !== 'calendar') {
+    
+    if (type !== 'calendar') { 
+      // Reset values first
+      modalAnimations.opacity.setValue(0);
+      modalAnimations.translateY.setValue(300);
+      
+      // Then animate in
       Animated.parallel([
-        Animated.timing(modalAnimations.opacity, { toValue: 1, duration: 250, useNativeDriver: true }),
-        Animated.spring(modalAnimations.translateY, { toValue: 0, tension: 100, friction: 8, useNativeDriver: true }),
+        Animated.timing(modalAnimations.opacity, { 
+          toValue: 1, 
+          duration: 300, // ✅ CHANGE: Longer duration for smoother animation
+          useNativeDriver: true 
+        }),
+        Animated.spring(modalAnimations.translateY, { 
+          toValue: 0, 
+          tension: 120, // ✅ CHANGE: Higher tension for snappier feel
+          friction: 8, 
+          useNativeDriver: true 
+        }),
       ]).start();
     }
   };
 
   const closeModal = (type: keyof typeof modals) => {
-    setModals(prev => ({ ...prev, [type]: false }));
+    if (type !== 'calendar') {
+      Animated.parallel([
+        Animated.timing(modalAnimations.opacity, { 
+          toValue: 0, 
+          duration: 250, 
+          useNativeDriver: true 
+        }),
+        Animated.timing(modalAnimations.translateY, { 
+          toValue: 300, 
+          duration: 250, 
+          useNativeDriver: true 
+        }),
+      ]).start(() => {
+        // Close modal after animation completes
+        setModals(prev => ({ ...prev, [type]: false }));
+      });
+    } else {
+      setModals(prev => ({ ...prev, [type]: false }));
+    }
   };
 
   // Event handlers
@@ -191,43 +234,96 @@ export default function CreateEventScreen() {
       return;
     }
 
+    if (!eventData.calendarId) {
+      Alert.alert('Error', 'Please select a calendar');
+      return;
+    }
+
+    console.log('=== DEBUGGING CALENDAR MAPPING ===');
+    console.log('Selected calendar ID:', eventData.calendarId);
+    console.log('All calendars:', calendars);
+    console.log('Looking for remoteId...');
+    
+    const selectedCalendar = calendars.find(cal => cal.id === eventData.calendarId);
+    console.log('Found calendar:', selectedCalendar);
+    console.log('Calendar remoteId:', selectedCalendar?.remoteId);
+
     setIsLoading(true);
     try {
-      const success = await createEvent(eventData);
+      // ✅ DEBUG: Check the mapping
+      const remoteCalendarId = getRemoteCalendarId(eventData.calendarId);
+      console.log('getRemoteCalendarId result:', remoteCalendarId);
+      
+      if (!remoteCalendarId) {
+        console.error('❌ No remote calendar ID found');
+        console.log('Available calendar mappings:');
+        calendars.forEach(cal => {
+          console.log(`- Local ID: ${cal.id}, Remote ID: ${cal.remoteId}, Name: ${cal.name}`);
+        });
+        
+        // ✅ TEMPORARY FIX: Use a fallback remote ID
+        Alert.alert('Debug Info', `Calendar mapping not found for ID: ${eventData.calendarId}. Check console for details.`);
+        return;
+      }
+
+      // ✅ Send event with remote calendar ID
+      const apiEventData = {
+        ...eventData,
+        calendarId: remoteCalendarId,
+      };
+
+      const success = await createEvent(apiEventData);
+      
       if (success.success) {
+        const apiResponseData = success.data.data[0];
+        
+        // ✅ FIXED: Map remote calendar ID back to local ID
+        const localCalendarId = getLocalCalendarId(apiResponseData.calendar_id) || 
+                               getCalendarByName(apiResponseData.calendar)?.id ||
+                               eventData.calendarId;
+
         const localEventObject: CalendarEvent = {
-          id: success.data.id,
-          title: success.data.name,
-          startDate: success.data.startDate,
-          endDate: success.data.endDate,
-          startTime: success.data.startTime,
-          endTime: success.data.endTime,
-          description: success.data.description,
-          hexcode: success.data.hexcode || eventData.hexcode || colors.primary,
-          timezone: success.data.timeZone,
-          location: success.data.location,
-          calendar: success.data.calendar,
-          invitees: eventData.invitees || [],
-          calendarId: success.data.calendar_id,
+          id: apiResponseData.id.toString(),
+          title: apiResponseData.name,
+          startDate: apiResponseData.startDate,
+          endDate: apiResponseData.endDate,
+          startTime: apiResponseData.startTime,
+          endTime: apiResponseData.endTime,
+          description: apiResponseData.description,
+          hexcode: apiResponseData.hexcode || colors.primary,
+          timezone: apiResponseData.timeZone,
+          location: apiResponseData.location,
+          calendar: apiResponseData.calendar,
+          invitees: apiResponseData.invitees || [],
+          calendarId: localCalendarId, // ✅ Use local calendar ID
         };
         
-        await addEvent(localEventObject);
-        Alert.alert('Success', 'Event created successfully!', [
-          { text: 'OK', onPress: () => router.back() }
-        ]);
+        const addResult = await addEvent(localEventObject);
+        
+        if (addResult) {
+          Alert.alert('Success', 'Event created successfully!', [
+            { text: 'OK', onPress: () => router.back() }
+          ]);
+        } else {
+          console.error('❌ Failed to add event to local database');
+          Alert.alert('Error', 'Event created but failed to save locally');
+        }
       } else {
-        Alert.alert('Error', 'Failed to create event. Please try again.');
+        console.log('❌ Backend API failed to create event');
+        Alert.alert('Error', `Failed to create event: ${success.error || 'Unknown error'}`);
       }
     } catch (error) {
-      console.error('Error creating event:', error);
+      console.error('❌ Exception during event creation:', error);
       Alert.alert('Error', 'An unexpected error occurred.');
     } finally {
       setIsLoading(false);
     }
   };
 
+  // ✅ FIXED: Add null checks in getSelectedCalendarColor
   const getSelectedCalendarColor = () => {
-    return calendars.find(cal => cal.name === eventData.calendar)?.hexcode || colors.primary;
+    const selectedCalendar = calendars.find(cal => cal.name === eventData.calendar);
+    return selectedCalendar?.hexcode || colors.primary;
   };
 
   // Render functions for cleaner JSX
