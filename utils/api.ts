@@ -597,8 +597,10 @@ export const updateEvent = async (rawEventData: any) => {
 
     const participants = rawEventData.invitees
 
-    const cloudEventObject = {
-      name: rawEventData.title,
+    console.log('Making API call...');
+    const response = await axios.put(
+      `https://twig-production.up.railway.app/events/${rawEventData.id}`,
+      { name: rawEventData.title,
       startDate: rawEventData.startDate,
       endDate: rawEventData.endDate,
       startTime: rawEventData.startTime,
@@ -607,14 +609,7 @@ export const updateEvent = async (rawEventData: any) => {
       hexcode: rawEventData.hexcode,
       timeZone: rawEventData.timezone,
       location: rawEventData.location,
-      calendar: rawEventData.calendar,
-    };
-
-
-    console.log('Making API call...');
-    const response = await axios.put(
-      `https://twig-production.up.railway.app/events/${rawEventData.id}`,
-      { eventData: cloudEventObject },
+      calendar: rawEventData.calendar, },
       {
         headers: {
           Authorization: `Bearer ${token}`,

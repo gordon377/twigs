@@ -44,12 +44,6 @@ export default function ProfileScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Top right avatar */}
-      <View style={[styles.avatarContainer, { top: insets.top + 8 }]}>
-        <View style={styles.avatarCircle}>
-          <Text style={styles.avatarText}>G</Text>
-        </View>
-      </View>
       {/* Centered logo/title */}
       <View style={styles.logoContainer}>
         {/* <LeafTwig width={80} height={80} /> */}
