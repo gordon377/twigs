@@ -677,6 +677,37 @@ export const deleteEvent = async (eventId: any) => {
   }
 };
 
+export const getEvents = async (startDate: string, endDate: string) => {
+  try {
+    const token = await SecureStore.getItemAsync('accessToken');
+    if (!token) {
+      return { success: false, error: 'No authentication token' };
+    }
 
+    const response = await axios.get(
+      `https://twig-production.up.railway.app/events`,
+      {startDate: startDate, endDate: endDate},
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+      }
+    );
+
+    if (response.data?.success) {
+      const { syncEventsWithAPI } = require('@/contexts/EventsContext');
+      
+      await syncEventsWithAPI(response.data.data, startDate, endDate);
+      
+      return { success: true, data: response.data };
+    }
+    
+    return { success: false, error: 'No data received' };
+  } catch (error: any) {
+    console.error('Error in getEvents:', error);
+    return { success: false, error: error.message };
+  }
+};
 
 

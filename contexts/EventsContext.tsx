@@ -25,6 +25,7 @@ interface EventsContextType {
   getLocalCalendarId: (remoteCalendarId: number) => string | null;
   getCalendarByName: (name: string) => Calendar | null;
   syncCalendarMapping: (localId: string, remoteId: number) => Promise<void>;
+  syncEventsWithAPI: (apiEvents: any[], startDate: string, endDate: string) => Promise<void>; // ✅ Added syncEventsWithAPI
 }
 
 const EventsContext = createContext<EventsContextType | undefined>(undefined);
@@ -502,6 +503,97 @@ export function EventsProvider({ children }: { children: ReactNode }) {
     initialize();
   }, [safeInitializeDatabase, clearAndRecreateDatabase, loadCalendarsFromDB, loadEventsFromDB]);
 
+  // ✅ Sync events with API
+  const syncEventsWithAPI = useCallback(async (apiEvents: any[], startDate: string, endDate: string) => {
+    try {
+      console.log('🔄 Starting events sync for date range:', startDate, 'to', endDate);
+      
+      // ✅ CRITICAL: Wrap everything in a transaction
+      await db.withTransactionAsync(async () => {
+        // Step 1: Delete all local events in the date range
+        await db.runAsync(`
+          DELETE FROM events 
+          WHERE (startDate >= ? AND startDate <= ?) 
+             OR (endDate >= ? AND endDate <= ?)
+             OR (startDate <= ? AND endDate >= ?)
+        `, [startDate, endDate, startDate, endDate, startDate, endDate]);
+        
+        // Step 2: Get calendar mappings
+        const calendarsResult = await db.getAllAsync('SELECT * FROM calendars') as any[];
+        const calendarMappings = new Map();
+        
+        calendarsResult.forEach((cal: any) => {
+          if (cal.remoteId) {
+            calendarMappings.set(cal.remoteId, cal.id);
+          }
+        });
+        
+        // Step 3: Process and insert API events
+        let successCount = 0;
+        
+        for (const apiEvent of apiEvents) {
+          let localCalendarId = calendarMappings.get(apiEvent.calendar_id);
+          
+          if (!localCalendarId) {
+            // Handle missing calendar mapping
+            const existingCalendar = calendarsResult.find(cal => 
+              cal.name.toLowerCase() === (apiEvent.calendar || 'Default').toLowerCase()
+            );
+            
+            if (existingCalendar) {
+              localCalendarId = existingCalendar.id;
+              await db.runAsync(
+                'UPDATE calendars SET remoteId = ? WHERE id = ?',
+                [apiEvent.calendar_id, existingCalendar.id]
+              );
+              calendarMappings.set(apiEvent.calendar_id, localCalendarId); // Update mapping
+            } else {
+              // Create new calendar
+              localCalendarId = `cal-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+              await db.runAsync(
+                'INSERT INTO calendars (id, remoteId, name, hexcode) VALUES (?, ?, ?, ?)',
+                [localCalendarId, apiEvent.calendar_id, apiEvent.calendar || 'Default', apiEvent.hexcode || '#007AFF']
+              );
+              calendarMappings.set(apiEvent.calendar_id, localCalendarId); // Update mapping
+            }
+          }
+          
+          // Insert event
+          await db.runAsync(`
+            INSERT INTO events (
+              id, title, startDate, endDate, startTime, endTime, 
+              description, timezone, location, invitees, calendarId
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `, [
+            apiEvent.id.toString(),
+            apiEvent.name || apiEvent.title || 'Untitled Event',
+            apiEvent.startDate,
+            apiEvent.endDate,
+            apiEvent.startTime || null,
+            apiEvent.endTime || null,
+            apiEvent.description || '',
+            apiEvent.timeZone || dateTimeHelpers.getUserTimezone(),
+            apiEvent.location || '',
+            JSON.stringify(apiEvent.invitees || []),
+            localCalendarId,
+          ]);
+          
+          successCount++;
+        }
+        
+        console.log('✅ Sync completed:', successCount, 'events synced');
+      }); // ✅ End of transaction - all or nothing!
+      
+      // ✅ Only refresh UI if transaction succeeds
+      await loadEventsFromDB();
+      await loadCalendarsFromDB();
+      
+    } catch (error) {
+      console.error('❌ Sync operation failed:', error);
+      throw error;
+    }
+  }, [loadEventsFromDB, loadCalendarsFromDB]);
+
   // ✅ Context value
   const contextValue: EventsContextType = {
     events,
@@ -521,6 +613,7 @@ export function EventsProvider({ children }: { children: ReactNode }) {
     getLocalCalendarId,
     getCalendarByName,
     syncCalendarMapping,
+    syncEventsWithAPI, // Add this
   };
 
   return (

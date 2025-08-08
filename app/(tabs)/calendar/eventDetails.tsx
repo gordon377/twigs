@@ -1,7 +1,9 @@
-import React, { useState, useRef } from 'react'; // ✅ Add useRef import
+import React, { useState, useRef } from 'react';
 import { 
   View, Text, TouchableOpacity, ScrollView, Alert, StyleSheet, 
-  Platform, Modal, Share, Linking
+  Platform, Modal, Share, Linking,
+  RefreshControl, // ✅ Add RefreshControl
+  ActivityIndicator // ✅ Add ActivityIndicator
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -9,7 +11,7 @@ import { colors } from '@/styles/styles';
 import { CalendarHeader } from '@/components/Drawer';
 import { CalendarEvent } from '@/types/events';
 import { useEvents } from '@/hooks/useEvents';
-import { updateEvent as updateEventAPI, deleteEvent as deleteEventAPI } from '@/utils/api'; // Rename the import
+import { updateEvent as updateEventAPI, deleteEvent as deleteEventAPI, getEvents } from '@/utils/api'; // ✅ Add getEvents import
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { EventForm } from '@/components/EventForm/EventForm';
 
@@ -19,7 +21,7 @@ export default function EventDetailsScreen() {
   const { 
     events, 
     deleteEvent: deleteEventLocal, 
-    updateEvent: updateEventLocal, // Rename to avoid conflict
+    updateEvent: updateEventLocal,
     getRemoteCalendarId,
     getLocalCalendarId,
     getCalendarByName 
@@ -28,10 +30,54 @@ export default function EventDetailsScreen() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
-  const eventFormRef = useRef<any>(null); // ✅ Replace setEventFormRef with useRef
+  const eventFormRef = useRef<any>(null);
+
+  // ✅ NEW: Add refresh state
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [refreshMessage, setRefreshMessage] = useState('');
 
   // Find the event
   const event = events.find(e => e.id === eventId);
+
+  // ✅ UPDATED: Pull-to-refresh function - only sync dates of current event
+  const handleRefresh = async () => {
+    if (isRefreshing || !event) return; // Prevent multiple simultaneous refreshes
+    
+    setIsRefreshing(true);
+    setRefreshMessage('Syncing events...');
+
+    try {
+      // ✅ Use the actual event dates from local DB
+      const startDate = event.startDate; // Already in YYYY-MM-DD format
+      const endDate = event.endDate;     // Already in YYYY-MM-DD format
+
+      console.log('🔄 Refreshing events for date range:', startDate, 'to', endDate);
+
+      // Call the API to sync events for the specific date range
+      const result = await getEvents(startDate, endDate);
+
+      if (result.success) {
+        setRefreshMessage('✅ Events synced successfully!');
+        setTimeout(() => {
+          setRefreshMessage('');
+        }, 1500);
+      } else {
+        setRefreshMessage('❌ Sync failed');
+        setTimeout(() => {
+          setRefreshMessage('');
+        }, 2000);
+        console.error('Failed to sync events:', result.error);
+      }
+    } catch (error) {
+      console.error('Error during refresh:', error);
+      setRefreshMessage('❌ Network error');
+      setTimeout(() => {
+        setRefreshMessage('');
+      }, 2000);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
   
   if (!event) {
     return (
@@ -55,21 +101,17 @@ export default function EventDetailsScreen() {
   }
 
   // Helper functions
-  // ✅ Fix the date formatting functions
   const formatEventDate = () => {
     if (!event.startDate) return 'No date';
     
     try {
-      // Create date from the stored date string (YYYY-MM-DD format)
       const [year, month, day] = event.startDate.split('-').map(Number);
-      const startDate = new Date(year, month - 1, day); // month is 0-indexed
+      const startDate = new Date(year, month - 1, day);
       
-      // Check if it's a multi-day event
       if (event.endDate && event.endDate !== event.startDate) {
         const [endYear, endMonth, endDay] = event.endDate.split('-').map(Number);
         const endDate = new Date(endYear, endMonth - 1, endDay);
         
-        // Format for date range
         const startFormatted = startDate.toLocaleDateString('en-US', {
           weekday: 'long',
           year: 'numeric',
@@ -87,7 +129,6 @@ export default function EventDetailsScreen() {
         return `${startFormatted} - ${endFormatted}`;
       }
       
-      // Single day event
       return startDate.toLocaleDateString('en-US', {
         weekday: 'long',
         year: 'numeric',
@@ -96,7 +137,7 @@ export default function EventDetailsScreen() {
       });
     } catch (error) {
       console.error('Error formatting date:', error);
-      return event.startDate; // Fallback to raw date
+      return event.startDate;
     }
   };
 
@@ -104,7 +145,6 @@ export default function EventDetailsScreen() {
     if (!event.startTime || !event.endTime) return 'All day';
     
     try {
-      // Create date objects for time formatting
       const today = new Date();
       const [startHour, startMinute] = event.startTime.split(':').map(Number);
       const [endHour, endMinute] = event.endTime.split(':').map(Number);
@@ -121,7 +161,7 @@ export default function EventDetailsScreen() {
       return `${startTime.toLocaleTimeString('en-US', timeOptions)} - ${endTime.toLocaleTimeString('en-US', timeOptions)}`;
     } catch (error) {
       console.error('Error formatting time:', error);
-      return `${event.startTime} - ${event.endTime}`; // Fallback to raw times
+      return `${event.startTime} - ${event.endTime}`;
     }
   };
 
@@ -167,7 +207,6 @@ export default function EventDetailsScreen() {
     );
   };
 
-  // ✅ Fix the share function date formatting
   const handleShare = async () => {
     try {
       const isAllDay = !event.startTime || !event.endTime;
@@ -219,7 +258,6 @@ export default function EventDetailsScreen() {
         return;
       }
 
-      // Get remote calendar ID for API call
       const remoteCalendarId = getRemoteCalendarId(updatedEventData.calendarId);
       
       if (!remoteCalendarId) {
@@ -228,21 +266,17 @@ export default function EventDetailsScreen() {
         return;
       }
 
-      // Prepare API data
-      // ✅ Combine ID and data into single object
       const apiEventData = {
-        id: event.id,           // Include the ID in the data
+        id: event.id,
         ...updatedEventData,
         calendarId: remoteCalendarId.toString(),
       };
 
-      // ✅ Use the API function that returns an object
       const apiResponse = await updateEventAPI(apiEventData);
       
-      if (apiResponse.success) { // ✅ Now this works
+      if (apiResponse.success) {
         const apiResponseData = apiResponse.data.data[0];
         
-        // Map remote calendar ID back to local ID
         const localCalendarId = getLocalCalendarId(apiResponseData.calendar_id) || 
                                getCalendarByName(apiResponseData.calendar)?.id ||
                                updatedEventData.calendarId;
@@ -264,10 +298,9 @@ export default function EventDetailsScreen() {
           calendarId: localCalendarId,
         };
         
-        // ✅ Use the local hook function that returns boolean
         const localUpdateResult = await updateEventLocal(event.id, updatedEventObject);
         
-        if (localUpdateResult) { // ✅ This is a boolean
+        if (localUpdateResult) {
           setShowEditModal(false);
           Alert.alert('Success', 'Event updated successfully!');
         } else {
@@ -284,7 +317,6 @@ export default function EventDetailsScreen() {
     }
   };
 
-  // ✅ Update the header update function
   const handleHeaderUpdate = () => {
     if (eventFormRef.current?.handleSubmit) {
       eventFormRef.current.handleSubmit();
@@ -315,7 +347,40 @@ export default function EventDetailsScreen() {
         ]}
       />
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      {/* ✅ NEW: Refresh indicator at the top */}
+      {(isRefreshing || refreshMessage) && (
+        <View style={styles.refreshIndicator}>
+          {isRefreshing ? (
+            <View style={styles.refreshContent}>
+              <ActivityIndicator size="small" color={colors.primary} />
+              <Text style={styles.refreshText}>Syncing events...</Text>
+            </View>
+          ) : (
+            <Text style={[
+              styles.refreshText, 
+              { color: refreshMessage.includes('✅') ? colors.success : colors.danger }
+            ]}>
+              {refreshMessage}
+            </Text>
+          )}
+        </View>
+      )}
+
+      {/* ✅ UPDATED: ScrollView with RefreshControl */}
+      <ScrollView 
+        style={styles.content} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            colors={[colors.primary]}
+            tintColor={colors.primary}
+            title="Pull to sync events"
+            titleColor={colors.textMuted}
+          />
+        }
+      >
         {/* Event Header */}
         <View style={styles.headerSection}>
           <View style={styles.titleRow}>
@@ -420,7 +485,7 @@ export default function EventDetailsScreen() {
         </View>
       </ScrollView>
 
-      {/* Edit Modal - Fixed ref usage */}
+      {/* Edit Modal */}
       <Modal visible={showEditModal} animationType="slide" presentationStyle="pageSheet">
         <SafeAreaView style={styles.modalContainer}>
           <CalendarHeader
@@ -442,7 +507,7 @@ export default function EventDetailsScreen() {
           />
           
           <EventForm
-            ref={eventFormRef} // ✅ Use useRef instead of setState
+            ref={eventFormRef}
             initialData={event}
             onSubmit={handleUpdate}
             submitButtonText="Update Event"
@@ -466,6 +531,29 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     paddingHorizontal: 16,
+  },
+
+  // ✅ NEW: Refresh indicator styles
+  refreshIndicator: {
+    backgroundColor: colors.primaryLight,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 8,
+    borderRadius: 8,
+    borderLeftWidth: 4,
+    borderLeftColor: colors.primary,
+  },
+  refreshContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  refreshText: {
+    fontSize: 14,
+    color: colors.primary,
+    fontWeight: '600',
   },
   
   // Error state
