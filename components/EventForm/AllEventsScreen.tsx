@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
 import { colors } from '@/styles/styles';
 import { useEvents } from '@/hooks/useEvents';
-import { CalendarEvent } from '@/types/events';
+import { CalendarEvent, dateTimeHelpers } from '@/types/events';
 import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
@@ -12,8 +12,9 @@ interface AllEventsScreenProps {
 
 export const AllEventsScreen: React.FC<AllEventsScreenProps> = ({ onEventPress }) => {
   const { events, isLoadingEvents } = useEvents();
+  const scrollViewRef = useRef<ScrollView>(null);
 
-  // Group events by date
+  // ✅ Group events by date in pure chronological order
   const groupedEvents = React.useMemo(() => {
     const groups: { [date: string]: CalendarEvent[] } = {};
     
@@ -25,8 +26,10 @@ export const AllEventsScreen: React.FC<AllEventsScreenProps> = ({ onEventPress }
       groups[date].push(event);
     });
 
-    // Sort dates
-    const sortedDates = Object.keys(groups).sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+    // ✅ Sort dates in chronological order only (no special today priority)
+    const sortedDates = Object.keys(groups).sort((a, b) => {
+      return new Date(a).getTime() - new Date(b).getTime();
+    });
     
     return sortedDates.map(date => ({
       date,
@@ -39,22 +42,83 @@ export const AllEventsScreen: React.FC<AllEventsScreenProps> = ({ onEventPress }
     }));
   }, [events]);
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const today = new Date();
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+  // ✅ Find the closest date to today for auto-scrolling
+  const findClosestDateIndex = React.useMemo(() => {
+    if (groupedEvents.length === 0) return 0;
+    
+    // ✅ FIXED: Use built-in timezone-aware helper
+    const todayString = dateTimeHelpers.getTodayStringInTimezone();
+    const today = new Date(todayString + 'T00:00:00');
+    
+    let closestIndex = 0;
+    let closestDiff = Infinity;
+    
+    groupedEvents.forEach((group, index) => {
+      const eventDate = new Date(group.date + 'T00:00:00');
+      
+      const diff = Math.abs(eventDate.getTime() - today.getTime());
+      
+      if (diff < closestDiff) {
+        closestDiff = diff;
+        closestIndex = index;
+      }
+    });
+    
+    return closestIndex;
+  }, [groupedEvents]);
 
-    if (date.toDateString() === today.toDateString()) {
+  // ✅ Auto-scroll to today's events when component loads
+  useEffect(() => {
+    if (groupedEvents.length > 0 && scrollViewRef.current) {
+      // Delay to ensure component is fully rendered
+      const scrollTimer = setTimeout(() => {
+        if (scrollViewRef.current) {
+          // Calculate approximate scroll position
+          // Each date group is roughly 100px + events (about 80px each)
+          let scrollY = 0;
+          
+          for (let i = 0; i < findClosestDateIndex; i++) {
+            scrollY += 100; // Date header height
+            scrollY += groupedEvents[i].events.length * 80; // Event items height
+          }
+          
+          // Scroll with some offset to show the date header nicely
+          scrollViewRef.current.scrollTo({
+            y: Math.max(0, scrollY - 50),
+            animated: true,
+          });
+        }
+      }, 300); // Wait for component to render
+      
+      return () => clearTimeout(scrollTimer);
+    }
+  }, [groupedEvents, findClosestDateIndex]);
+
+  // ✅ FIXED: Use built-in timezone-aware date formatting
+  const formatDate = (dateString: string) => {
+    // ✅ Use built-in timezone-aware helper to get today's date
+    const todayString = dateTimeHelpers.getTodayStringInTimezone();
+    
+    // ✅ Calculate tomorrow and yesterday using timezone-aware today
+    const todayDate = dateTimeHelpers.parseDate(todayString);
+    const tomorrowDate = new Date(todayDate);
+    tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+    const tomorrowString = dateTimeHelpers.formatDateForStorage(tomorrowDate);
+    
+    const yesterdayDate = new Date(todayDate);
+    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+    const yesterdayString = dateTimeHelpers.formatDateForStorage(yesterdayDate);
+
+    // ✅ Compare date strings directly (no timezone conversion needed)
+    if (dateString === todayString) {
       return 'Today';
-    } else if (date.toDateString() === tomorrow.toDateString()) {
+    } else if (dateString === tomorrowString) {
       return 'Tomorrow';
+    } else if (dateString === yesterdayString) {
+      return 'Yesterday';
     } else {
-      return date.toLocaleDateString('en-US', { 
-        weekday: 'long', 
-        month: 'short', 
-        day: 'numeric' 
-      });
+      // ✅ Use built-in helper for consistent date formatting
+      return dateTimeHelpers.formatDateForDisplay(dateString);
     }
   };
 
@@ -64,6 +128,11 @@ export const AllEventsScreen: React.FC<AllEventsScreenProps> = ({ onEventPress }
     } else {
       router.push(`/(tabs)/calendar/eventDetails?eventId=${event.id}`);
     }
+  };
+
+  // ✅ Handle create event press
+  const handleCreateEvent = () => {
+    router.push('/(tabs)/calendar/createEvent');
   };
 
   if (isLoadingEvents) {
@@ -80,15 +149,44 @@ export const AllEventsScreen: React.FC<AllEventsScreenProps> = ({ onEventPress }
         <Ionicons name="calendar-outline" size={64} color={colors.grey} />
         <Text style={styles.emptyTitle}>No Events</Text>
         <Text style={styles.emptySubtitle}>Your events will appear here</Text>
+        
+        <TouchableOpacity 
+          style={styles.createButtonEmpty}
+          onPress={handleCreateEvent}
+          activeOpacity={0.8}
+        >
+          <View style={styles.createIconEmpty}>
+            <Ionicons name="add" size={24} color={colors.white} />
+          </View>
+          <Text style={styles.createTextEmpty}>Create your first event</Text>
+        </TouchableOpacity>
       </View>
     );
   }
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      {groupedEvents.map(({ date, events }) => (
-        <View key={date} style={styles.dateGroup}>
-          <Text style={styles.dateHeader}>{formatDate(date)}</Text>
+    <ScrollView 
+      ref={scrollViewRef} // ✅ Add ref for auto-scrolling
+      style={styles.container} 
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={styles.scrollContent} // ✅ Add content container style
+    >
+      {groupedEvents.map(({ date, events }, index) => (
+        <View 
+          key={date} 
+          style={[
+            styles.dateGroup,
+            // ✅ FIXED: Use proper timezone comparison
+            date === dateTimeHelpers.getTodayStringInTimezone() && styles.todaySection
+          ]}
+        >
+          <Text style={[
+            styles.dateHeader,
+            // ✅ FIXED: Use proper timezone comparison
+            date === dateTimeHelpers.getTodayStringInTimezone() && styles.todayHeader
+          ]}>
+            {formatDate(date)}
+          </Text>
           
           {events.map(event => (
             <TouchableOpacity
@@ -132,16 +230,33 @@ export const AllEventsScreen: React.FC<AllEventsScreenProps> = ({ onEventPress }
         </View>
       ))}
       
-      {/* Bottom padding */}
-      <View style={{ height: 100 }} />
+      {/* ✅ Bottom create event prompt */}
+      <View style={styles.bottomPrompt}>
+        <Text style={styles.endText}>That's all your events!</Text>
+        
+        <TouchableOpacity 
+          style={styles.createButton}
+          onPress={handleCreateEvent}
+          activeOpacity={0.8}
+        >
+          <View style={styles.createIcon}>
+            <Ionicons name="add" size={20} color={colors.white} />
+          </View>
+          <Text style={styles.createText}>Create new event</Text>
+        </TouchableOpacity>
+      </View>
     </ScrollView>
   );
 };
 
+// ✅ Styles remain exactly the same
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  scrollContent: {
+    paddingTop: 16,
   },
   loadingContainer: {
     flex: 1,
@@ -171,9 +286,17 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.grey,
     textAlign: 'center',
+    marginBottom: 32,
   },
   dateGroup: {
     marginBottom: 24,
+  },
+  todaySection: {
+    backgroundColor: colors.lightGreen + '10',
+    marginHorizontal: 8,
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
   },
   dateHeader: {
     fontSize: 18,
@@ -182,6 +305,10 @@ const styles = StyleSheet.create({
     marginHorizontal: 20,
     marginBottom: 12,
     marginTop: 8,
+  },
+  todayHeader: {
+    color: colors.darkGreen,
+    fontWeight: '700',
   },
   eventItem: {
     backgroundColor: colors.white,
@@ -233,5 +360,72 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.grey,
     flex: 1,
+  },
+  bottomPrompt: {
+    alignItems: 'center',
+    paddingVertical: 40,
+    paddingHorizontal: 20,
+    marginBottom: 60,
+  },
+  endText: {
+    fontSize: 16,
+    color: colors.grey,
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  createButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.white,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 25,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    gap: 8,
+  },
+  createIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.darkGreen,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  createText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  createButtonEmpty: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.white,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 30,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    gap: 12,
+    marginTop: 24,
+  },
+  createIconEmpty: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.darkGreen,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  createTextEmpty: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.text,
   },
 });
