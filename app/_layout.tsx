@@ -4,10 +4,26 @@ import { ProfileProvider } from '@/contexts/ProfileContext';
 import { EventsProvider } from '@/contexts/EventsContext';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 
-// ✅ Inner component that conditionally renders screens
 function RootLayoutContent() {
   const { isLoading, isAuthenticated } = useAuth();
 
+  // ✅ Show nothing while loading (splash screen remains visible)
+  if (isLoading) {
+    console.log('🔄 Still loading, keeping splash screen visible');
+    return null;
+  }
+
+  console.log('🎨 Rendering app UI, splash screen will hide soon');
+
+  // ✅ Array-based conditional rendering
+  const screens = !isAuthenticated ? [
+    <Stack.Screen key="index" name="index" />,
+    <Stack.Screen key="logIn" name="logIn" />,
+    <Stack.Screen key="signUpPassword" name="signUpPassword" />,
+    <Stack.Screen key="signUpUser" name="signUpUser" />,
+  ] : [
+    <Stack.Screen key="tabs" name="(tabs)" />,
+  ];
 
   return (
     <Stack
@@ -15,25 +31,10 @@ function RootLayoutContent() {
         headerShown: false,
         animation: 'slide_from_right',
         presentation: 'card',
-        gestureEnabled: false, // ✅ Disable swipe gestures entirely
+        gestureEnabled: false,
       }}
     >
-      {/* ✅ Conditionally render screens based on auth state */}
-      {!isAuthenticated ? (
-        // Unauthenticated screens
-        <>
-          <Stack.Screen name="index" />
-          <Stack.Screen name="logIn" />
-          <Stack.Screen name="signUpPassword" />
-          <Stack.Screen name="signUpUser" />
-        </>
-      ) : (
-        // Authenticated screens only
-        <>
-          <Stack.Screen name="(tabs)" />
-        </>
-      )}
-      
+      {screens}
       <Stack.Screen name="+not-found" options={{ title: 'Default Error Page'}} />
     </Stack>
   );
