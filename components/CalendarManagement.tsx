@@ -23,7 +23,13 @@ export default function CalendarManagement({
   selectedCalendarId,
   mode = 'select'
 }: CalendarManagementProps) {
-  const { calendars, addCalendar, updateCalendar, deleteCalendar } = useEvents();
+  const { 
+    calendars, 
+    addCalendar, 
+    updateCalendar, 
+    deleteCalendar,
+    syncCalendarsWithAPI 
+  } = useEvents();
   
   // Modal stack states
   const [activeModal, setActiveModal] = useState<'list' | 'add' | 'edit' | 'manage'>('list');
@@ -34,6 +40,9 @@ export default function CalendarManagement({
     name: '',
     hexcode: '#007AFF',
   });
+
+  // ✅ NEW: Add refresh functionality
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Handle Android back button
   useEffect(() => {
@@ -90,6 +99,19 @@ export default function CalendarManagement({
     setActiveModal('edit');
   };
 
+  const handleRefreshCalendars = async () => {
+    setIsRefreshing(true);
+    try {
+      await syncCalendarsWithAPI();
+      Alert.alert('Success', 'Calendars synced successfully!');
+    } catch (error) {
+      console.error('Refresh error:', error);
+      Alert.alert('Error', 'Failed to sync calendars');
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   const handleSaveCalendar = async () => {
     if (!calendarForm.name.trim()) {
       Alert.alert('Error', 'Please enter a calendar name');
@@ -103,20 +125,19 @@ export default function CalendarManagement({
 
     try {
       if (editingCalendar) {
-        // Update existing calendar
-        const updatedCalendar = await updateCalendar(editingCalendar.id, {
+        const success = await updateCalendar(editingCalendar.id, {
           name: calendarForm.name.trim(),
           hexcode: calendarForm.hexcode,
         });
 
-        if (updatedCalendar) {
+        if (success) {
           Alert.alert('Success', 'Calendar updated successfully!');
           setActiveModal('manage');
         } else {
           Alert.alert('Error', 'Failed to update calendar');
         }
       } else {
-        // Create new calendar
+        // ✅ FIXED: addCalendar returns Calendar | null, not boolean
         const newCalendar = await addCalendar({
           name: calendarForm.name.trim(),
           hexcode: calendarForm.hexcode,
@@ -125,7 +146,7 @@ export default function CalendarManagement({
         if (newCalendar) {
           Alert.alert('Success', 'Calendar added successfully!');
           if (mode === 'select' && onSelectCalendar) {
-            handleSelectCalendar(newCalendar);
+            onSelectCalendar(newCalendar); // ✅ Pass the calendar object, not boolean
           } else {
             setActiveModal('manage');
           }
@@ -285,9 +306,22 @@ export default function CalendarManagement({
           </Text>
         </TouchableOpacity>
         <Text style={styles.modalTitle}>Manage Calendars</Text>
-        <TouchableOpacity onPress={openAddCalendar}>
-          <Ionicons name="add" size={24} color={colors.primary} />
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity 
+            onPress={handleRefreshCalendars} 
+            style={styles.headerActionButton}
+            disabled={isRefreshing}
+          >
+            <Ionicons 
+              name={isRefreshing ? "hourglass" : "refresh"} 
+              size={20} 
+              color={colors.primary} 
+            />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={openAddCalendar} style={styles.headerActionButton}>
+            <Ionicons name="add" size={24} color={colors.primary} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Calendar Management List */}
@@ -879,5 +913,18 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.text,
     fontWeight: '500',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  headerActionButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.offWhite,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

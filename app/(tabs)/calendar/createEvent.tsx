@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { colors } from '@/styles/styles';
 import { CalendarHeader } from '@/components/Drawer';
-import { CalendarEvent } from '@/types/events';
+import { CalendarEvent, dateTimeHelpers } from '@/types/events';
 import { useEvents } from '@/hooks/useEvents';
 import { createEvent as createEventAPI } from '@/utils/api';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -59,19 +59,30 @@ export default function CreateEventScreen() {
       if (response.success && response.data) {
         const apiResponseData = response.data.data[0];
         
+        console.log('✅ API response data:', apiResponseData);
+        
         // Map back to local calendar ID
         const localCalendarId = getLocalCalendarId(apiResponseData.calendar_id) || 
                                getCalendarByName(apiResponseData.calendar)?.id ||
                                eventData.calendarId;
 
+        // ✅ FIXED: Ensure the dates are proper ISO strings
+        const startDateISO = apiResponseData.startDate;
+        const endDateISO = apiResponseData.endDate;
+        
+        console.log('🔍 Checking date formats:', {
+          startDate: startDateISO,
+          endDate: endDateISO,
+          startValid: dateTimeHelpers.isValidISOString(startDateISO),
+          endValid: dateTimeHelpers.isValidISOString(endDateISO)
+        });
+
         // Create local event object
         const newEventObject: CalendarEvent = {
           id: apiResponseData.id.toString(),
           title: apiResponseData.name,
-          startDate: apiResponseData.startDate,
-          endDate: apiResponseData.endDate,
-          startTime: apiResponseData.startTime,
-          endTime: apiResponseData.endTime,
+          startDate: startDateISO,  // ✅ ISO format from API
+          endDate: endDateISO,      // ✅ ISO format from API
           description: apiResponseData.description || '',
           hexcode: apiResponseData.hexcode || colors.primary,
           timezone: apiResponseData.timeZone,
@@ -81,6 +92,14 @@ export default function CreateEventScreen() {
           calendarId: localCalendarId,
         };
         
+        console.log('✅ Created event object for local storage:', {
+          id: newEventObject.id,
+          title: newEventObject.title,
+          startDate: newEventObject.startDate,
+          endDate: newEventObject.endDate,
+          calendarId: newEventObject.calendarId
+        });
+        
         // Add to local database
         const success = await addEvent(newEventObject);
         
@@ -89,7 +108,7 @@ export default function CreateEventScreen() {
             { text: 'OK', onPress: () => router.back() }
           ]);
         } else {
-          Alert.alert('Warning', 'Event created but failed to save locally');
+          Alert.alert('Warning', 'Event created on server but failed to save locally');
         }
       } else {
         Alert.alert('Error', `Failed to create event: ${response.error || 'Unknown error'}`);

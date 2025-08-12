@@ -1,5 +1,5 @@
-import React, { memo, useMemo, useCallback } from 'react';
-import { View, Text, TouchableOpacity, FlatList, StyleSheet } from 'react-native';
+import React, { memo, useMemo, useCallback, forwardRef, useImperativeHandle, useRef, useState, useEffect } from 'react';
+import { View, Text, TouchableOpacity, FlatList, StyleSheet, ScrollView, Animated, PanResponder, Easing } from 'react-native';
 import { useRouter } from 'expo-router';
 import { colors } from '@/styles/styles';
 import { Calendar, CalendarTheme, toDateId } from '@marceloterreiro/flash-calendar';
@@ -205,52 +205,180 @@ export const EventsList = memo<{ date: string }>(({ date }) => {
 });
 
 // ✅ Optimize SingleDateCalendar with better memoization
-export const SingleDateCalendar = memo<{
+type SingleDateCalendarProps = {
   today: string;
   selectedDate: string;
   setSelectedDate: (date: string) => void;
-}>(({ today, selectedDate, setSelectedDate }) => {
-  const { datesWithEvents } = useEvents();
-  
-  // ✅ Memoize calendar theme at component level
-  const calendarTheme = useMemo(() => customThemeLight, []);
+};
 
-  // ✅ Stable callback reference for date selection
-  const handleDateSelect = useCallback((date: string) => {
-    setSelectedDate(date);
-  }, [setSelectedDate]);
+// ✅ ULTRA-SIMPLE: Minimal implementation that avoids Date issues
+const SingleDateCalendarInner = forwardRef<any, SingleDateCalendarProps>(
+  ({ today, selectedDate, setSelectedDate }, ref) => {
+    const calendarRef = useRef<any>(null);
+    const [isTransitioning, setIsTransitioning] = useState(false);
+    const [calendarKey, setCalendarKey] = useState(0);
+    
+    // ✅ Animated values for seamless transitions
+    const transitionOpacity = useRef(new Animated.Value(1)).current;
+    const transitionScale = useRef(new Animated.Value(1)).current;
 
-  // ✅ Memoize active date ranges
-  const activeDateRanges = useMemo(() => [
-    { startId: selectedDate, endId: selectedDate },
-  ], [selectedDate]);
+    // ✅ SEAMLESS: Completely hide the re-render with smooth opacity
+    useImperativeHandle(ref, () => ({
+      scrollToToday: () => {
+        console.log('📅 Seamlessly transitioning to today:', today);
+        
+        return new Promise<void>((resolve) => {
+          setIsTransitioning(true);
+          
+          // ✅ Phase 1: Smooth fade out (hide the current calendar)
+          Animated.parallel([
+            Animated.timing(transitionOpacity, {
+              toValue: 0,  // ✅ Completely invisible
+              duration: 250,  // ✅ Slightly longer for smoother feel
+              useNativeDriver: true,
+              easing: Easing.out(Easing.cubic),
+            }),
+            Animated.timing(transitionScale, {
+              toValue: 0.92,  // ✅ Subtle scale down
+              duration: 250,
+              useNativeDriver: true,
+              easing: Easing.out(Easing.cubic),
+            }),
+          ]).start(() => {
+            // ✅ Phase 2: Re-render happens while completely invisible
+            setSelectedDate(today);
+            setCalendarKey(prev => prev + 1);
+            
+            console.log('📅 Calendar re-rendered invisibly');
+            
+            // ✅ Small delay to ensure re-render completes
+            setTimeout(() => {
+              // ✅ Phase 3: Smooth fade back in (reveal new calendar)
+              Animated.parallel([
+                Animated.timing(transitionOpacity, {
+                  toValue: 1,  // ✅ Fully visible
+                  duration: 300,  // ✅ Slightly longer for elegant reveal
+                  useNativeDriver: true,
+                  easing: Easing.out(Easing.quad), // ✅ Different easing for reveal
+                }),
+                Animated.timing(transitionScale, {
+                  toValue: 1,
+                  duration: 300,
+                  useNativeDriver: true,
+                  easing: Easing.out(Easing.quad),
+                }),
+              ]).start(() => {
+                setIsTransitioning(false);
+                console.log('✅ Seamless transition completed');
+                resolve();
+              });
+            }, 50); // ✅ Small buffer for re-render
+          });
+        });
+      },
 
-  // ✅ Memoize date formatter
-  const getCalendarDayFormat = useCallback((date: Date, locale: string) => {
-    return date.getDate().toString();
-  }, []);
+      scrollToDate: (date: string) => {
+        return new Promise<void>((resolve) => {
+          console.log('📅 Seamlessly transitioning to date:', date);
+          setIsTransitioning(true);
+          
+          // Same seamless pattern for any date
+          Animated.timing(transitionOpacity, {
+            toValue: 0,
+            duration: 200,
+            useNativeDriver: true,
+            easing: Easing.out(Easing.cubic),
+          }).start(() => {
+            setSelectedDate(date);
+            setCalendarKey(prev => prev + 1);
+            
+            setTimeout(() => {
+              Animated.timing(transitionOpacity, {
+                toValue: 1,
+                duration: 250,
+                useNativeDriver: true,
+                easing: Easing.out(Easing.quad),
+              }).start(() => {
+                setIsTransitioning(false);
+                resolve();
+              });
+            }, 50);
+          });
+        });
+      }
+    }));
 
-  return (
-    <View style={styles.cal}>
-      <Calendar.List
-        theme={calendarTheme}
-        calendarInitialMonthId={today}
-        horizontal={false}
-        calendarActiveDateRanges={activeDateRanges}
-        onCalendarDayPress={handleDateSelect}
-        calendarFormatLocale="en"
-        getCalendarDayFormat={getCalendarDayFormat}
-      />
-    </View>
-  );
-}, (prevProps, nextProps) => {
-  // ✅ Custom comparison function
-  return (
-    prevProps.today === nextProps.today &&
-    prevProps.selectedDate === nextProps.selectedDate &&
-    prevProps.setSelectedDate === nextProps.setSelectedDate
-  );
-});
+    // ✅ Calculate initial month for seamless re-renders
+    const initialMonthId = useMemo(() => {
+      return selectedDate || today;
+    }, [selectedDate, today, calendarKey]);
+
+    // ✅ Memoize calendar theme
+    const calendarTheme = useMemo(() => customThemeLight, []);
+
+    // ✅ Handle date selection
+    const handleDateSelect = useCallback((date: string) => {
+      console.log('📅 Date selected:', date);
+      setSelectedDate(date);
+    }, [setSelectedDate]);
+
+    // ✅ Memoize active date ranges
+    const activeDateRanges = useMemo(() => [
+      { startId: selectedDate, endId: selectedDate },
+    ], [selectedDate]);
+
+    // ✅ Safe date formatter
+    const getCalendarDayFormat = useCallback((date: Date, locale: string) => {
+      try {
+        if (date && typeof date.getDate === 'function') {
+          return date.getDate().toString();
+        }
+        return '?';
+      } catch (error) {
+        return '?';
+      }
+    }, []);
+
+    return (
+      <Animated.View 
+        style={[
+          styles.cal, 
+          { 
+            opacity: transitionOpacity,
+            transform: [{ scale: transitionScale }]
+          }
+        ]}
+      >
+        <Calendar.List
+          key={`calendar-${calendarKey}-${initialMonthId}`}
+          ref={calendarRef}
+          theme={calendarTheme}
+          calendarInitialMonthId={initialMonthId}
+          horizontal={false}
+          calendarActiveDateRanges={activeDateRanges}
+          onCalendarDayPress={handleDateSelect}
+          calendarFormatLocale="en"
+          getCalendarDayFormat={getCalendarDayFormat}
+        />
+      </Animated.View>
+    );
+  }
+);
+
+export const SingleDateCalendar = React.memo(
+  SingleDateCalendarInner,
+  (
+    prevProps: SingleDateCalendarProps,
+    nextProps: SingleDateCalendarProps
+  ) => {
+    // ✅ Custom comparison function
+    return (
+      prevProps.today === nextProps.today &&
+      prevProps.selectedDate === nextProps.selectedDate &&
+      prevProps.setSelectedDate === nextProps.setSelectedDate
+    );
+  }
+);
 
 // ✅ Move theme to module level to prevent recreation
 const customThemeLight: CalendarTheme = {
@@ -328,5 +456,49 @@ const styles = StyleSheet.create({
   cal: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  pageContainer: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  calendarContainer: {
+    flex: 1,
+  },
+  eventsGestureContainer: {
+    // Styles for the gesture container
+  },
+  eventsListContainer: {
+    // Styles for the animated events list container
+  },
+  dragHandle: {
+    // Styles for the drag handle
+  },
+  dragIndicator: {
+    // Styles for the drag indicator
+  },
+  eventsContent: {
+    // Styles for the events content
+  },
+  errorContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+  },
+  errorText: {
+    color: colors.textMuted,
+    fontSize: 16,
+    marginTop: 8,
+  },
+  retryButton: {
+    marginTop: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    backgroundColor: colors.darkGreen,
+    borderRadius: 4,
+  },
+  retryButtonText: {
+    color: colors.white,
+    fontWeight: '600',
   },
 });

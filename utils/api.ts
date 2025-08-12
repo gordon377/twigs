@@ -120,6 +120,27 @@ export const logIn = async (
       console.log('Error updating profile:', error);
     }
 
+    // ✅ NEW: Initialize calendars after successful login
+    try {
+      console.log('🔧 Initializing calendars after login...');
+      
+      // Use a slight delay to ensure EventsContext is ready
+      setTimeout(async () => {
+        try {
+          // Import the context function
+          const { initializeCalendarsFromAPI } = require('@/contexts/EventsContext');
+          if (initializeCalendarsFromAPI) {
+            await initializeCalendarsFromAPI();
+            console.log('✅ Calendars initialized successfully');
+          }
+        } catch (initError) {
+          console.error('❌ Calendar initialization failed:', initError);
+        }
+      }, 1000);
+    } catch (error) {
+      console.log('Error initializing calendars:', error);
+    }
+
     router.replace('/(tabs)/profile');
   } catch (error: any) {
     if (error.response && error.response.data) {
@@ -207,6 +228,9 @@ export const signUp = async (
     })
     .finally(cleanUp);
    };
+
+
+{/* Profile Management Routes */}
 
 // updateProfile
 export const updateProfile = async (
@@ -467,6 +491,159 @@ export const changeEmail = async (
   }
 };
 
+{/* Calendar Management/CRUD Routes */}
+
+//Create Calendar
+export const createCalendar = async (calendarData: any) => {
+  console.log('createCalendar called');
+
+  try {
+    const token = await SecureStore.getItemAsync('accessToken');
+
+    if (!token) {
+      console.log('No access token found');
+      return { success: false, error: 'No authentication token' };
+    }
+
+    console.log('Making API call...');
+    const response = await axios.post(
+      'https://twig-production.up.railway.app/calendar',
+      { 
+        name: calendarData.name,
+        hexcode: calendarData.hexcode,
+        is_private: calendarData.is_private || false,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+      }
+    );
+    console.log('API call successful');
+    console.log('Response data:', response.data);
+
+    return { success: true, data: response.data };
+  } catch (error: any) {
+    console.log('Error in createCalendar:', error);
+    return { 
+      success: false, 
+      error: error.response?.data?.message || 'Failed to create calendar' 
+    };
+  }
+};
+
+//Get Calendars
+export const getCalendars = async () => {
+  console.log('getCalendars called');
+
+  try {
+    const token = await SecureStore.getItemAsync('accessToken');
+
+    if (!token) {
+      console.log('No access token found');
+      return { success: false, error: 'No authentication token' };
+    }
+
+    console.log('Making API call...');
+    const response = await axios.get(
+      'https://twig-production.up.railway.app/calendar',
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+      }
+    );
+    console.log('API call successful');
+    console.log('Response data:', response.data);
+
+    return { success: true, data: response.data };
+  } catch (error: any) {
+    console.log('Error in getCalendars:', error);
+    return { 
+      success: false, 
+      error: error.response?.data?.message || 'Failed to get calendars' 
+    };
+  }
+};
+
+//Update Calendar
+export const updateCalendar = async (calendarData: any) => {
+  console.log('updateCalendar called');
+
+  try {
+    const token = await SecureStore.getItemAsync('accessToken');
+
+    if (!token) {
+      console.log('No access token found');
+      return { success: false, error: 'No authentication token' };
+    }
+
+    console.log('Making API call...');
+    const response = await axios.put(
+      `https://twig-production.up.railway.app/calendar/${calendarData.calendarId}`,
+      { 
+        name: calendarData.name,
+        hexcode: calendarData.hexcode,
+        is_private: calendarData.is_private || false,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+      }
+    );
+    console.log('API call successful');
+    console.log('Response data:', response.data);
+
+    return { success: true, data: response.data };
+  } catch (error: any) {
+    console.log('Error in updateCalendar:', error);
+    return { 
+      success: false, 
+      error: error.response?.data?.message || 'Failed to update calendar' 
+    };
+  }
+};
+
+// Delete Calendar
+
+export const deleteCalendar = async (calendarData: any) => {
+  console.log('deleteCalendar called');
+
+  try {
+    const token = await SecureStore.getItemAsync('accessToken');
+
+    if (!token) {
+      console.log('No access token found');
+      return { success: false, error: 'No authentication token' };
+    }
+
+    console.log('Making API call...');
+    const response = await axios.delete(
+      `https://twig-production.up.railway.app/calendar/${calendarData.calendarId}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+      }
+    );
+    console.log('API call successful');
+    console.log('Response data:', response.data);
+
+    return { success: true, data: response.data };
+  } catch (error: any) {
+    console.log('Error in deleteCalendar:', error);
+    return { 
+      success: false, 
+      error: error.response?.data?.message || 'Failed to delete calendar' 
+    };
+  }
+};
+
 {/* Connection Routes */}
 
 // getConnections
@@ -519,8 +696,7 @@ export const getConnections = async (
   }
 };
 
-{/* Event Routes */}
-
+{/* CRUD Event Routes */}
 
 // createEvent (runs in background)
 export const createEvent = async (rawEventData: any) => {
@@ -529,21 +705,19 @@ export const createEvent = async (rawEventData: any) => {
   try {
     const token = await SecureStore.getItemAsync('accessToken');
 
-    console.log('Token retrieved:', token ? 'exists' : 'null');
-
     if (!token) {
       console.log('No access token found');
       return { success: false, error: 'No authentication token' };
     }
 
-    const participants = rawEventData.invitees
+
+
+    console.log(rawEventData.startDate, rawEventData.endDate);
 
     const cloudEventObject = {
       name: rawEventData.title,
-      startDate: rawEventData.startDate,
-      endDate: rawEventData.endDate,
-      startTime: rawEventData.startTime,
-      endTime: rawEventData.endTime,
+      startDate: rawEventData.startDate,  // ✅ Proper ISO format
+      endDate: rawEventData.endDate,      // ✅ Proper ISO format
       description: rawEventData.description,
       hexcode: rawEventData.hexcode,
       timeZone: rawEventData.timezone,
@@ -551,11 +725,10 @@ export const createEvent = async (rawEventData: any) => {
       calendar: rawEventData.calendar,
     };
 
-
-    console.log('Making API call...');
+    console.log('Making API call with corrected ISO format:', cloudEventObject);
     const response = await axios.post(
       'https://twig-production.up.railway.app/events',
-      { event: cloudEventObject, participants: participants },
+      { event: cloudEventObject, participants: rawEventData.invitees },
       {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -563,24 +736,17 @@ export const createEvent = async (rawEventData: any) => {
         },
       }
     );
-    console.log('API call successful');
-    console.log('Response data:', response.data);
 
+    console.log('API call successful:', response.data);
     return { success: true, data: response.data };
   } catch (error: any) {
-    console.log('Error in createEventOnServer:', error);
-    if (error.response && error.response.data) {
-      console.log('Server Error Data: ', error.response.data);
-    } else {
-      console.log('Server Error: ', error);
-    }
+    console.log('Error in createEvent:', error);
     return { 
       success: false, 
-      error: error.response?.data?.message || 'Failed to create event on server' 
+      error: error.response?.data?.message || 'Failed to create event' 
     };
   }
 };
-
 
 export const updateEvent = async (rawEventData: any) => {
   console.log('updateEvent called with:', rawEventData);
@@ -588,28 +754,22 @@ export const updateEvent = async (rawEventData: any) => {
   try {
     const token = await SecureStore.getItemAsync('accessToken');
 
-    console.log('Token retrieved:', token ? 'exists' : 'null');
-
     if (!token) {
-      console.log('No access token found');
       return { success: false, error: 'No authentication token' };
     }
 
-    const participants = rawEventData.invitees
-
-    console.log('Making API call...');
     const response = await axios.put(
       `https://twig-production.up.railway.app/events/${rawEventData.id}`,
-      { name: rawEventData.title,
-      startDate: rawEventData.startDate,
-      endDate: rawEventData.endDate,
-      startTime: rawEventData.startTime,
-      endTime: rawEventData.endTime,
-      description: rawEventData.description,
-      hexcode: rawEventData.hexcode,
-      timeZone: rawEventData.timezone,
-      location: rawEventData.location,
-      calendar: rawEventData.calendar, },
+      {
+        name: rawEventData.title,
+        startDate: rawEventData.startDate,  // ✅ ISO 8601 format
+        endDate: rawEventData.endDate,      // ✅ ISO 8601 format
+        description: rawEventData.description,
+        hexcode: rawEventData.hexcode,
+        timeZone: rawEventData.timezone,
+        location: rawEventData.location,
+        calendar: rawEventData.calendar,
+      },
       {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -617,20 +777,12 @@ export const updateEvent = async (rawEventData: any) => {
         },
       }
     );
-    console.log('API call successful');
-    console.log('Response data:', response.data);
 
     return { success: true, data: response.data };
   } catch (error: any) {
-    console.log('Error in update EventOnServer:', error);
-    if (error.response && error.response.data) {
-      console.log('Server Error Data: ', error.response.data);
-    } else {
-      console.log('Server Error: ', error);
-    }
     return { 
       success: false, 
-      error: error.response?.data?.message || 'Failed to update event on server' 
+      error: error.response?.data?.message || 'Failed to update event' 
     };
   }
 };
@@ -677,6 +829,7 @@ export const deleteEvent = async (eventId: any) => {
   }
 };
 
+// ✅ FIXED: getEvents with proper date range
 export const getEvents = async (startDate: string, endDate: string) => {
   try {
     const token = await SecureStore.getItemAsync('accessToken');
@@ -684,10 +837,17 @@ export const getEvents = async (startDate: string, endDate: string) => {
       return { success: false, error: 'No authentication token' };
     }
 
+    // ✅ Convert date range to ISO for API
+    const startISO = `${startDate}T00:00:00Z`;
+    const endISO = `${endDate}T23:59:59Z`;
+
     const response = await axios.get(
       `https://twig-production.up.railway.app/events`,
-      {startDate: startDate, endDate: endDate},
       {
+        params: {
+          startDate: startISO,
+          endDate: endISO,
+        },
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -697,9 +857,7 @@ export const getEvents = async (startDate: string, endDate: string) => {
 
     if (response.data?.success) {
       const { syncEventsWithAPI } = require('@/contexts/EventsContext');
-      
       await syncEventsWithAPI(response.data.data, startDate, endDate);
-      
       return { success: true, data: response.data };
     }
     
@@ -710,4 +868,5 @@ export const getEvents = async (startDate: string, endDate: string) => {
   }
 };
 
+{/* Event Interaction Routes */}
 

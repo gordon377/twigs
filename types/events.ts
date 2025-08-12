@@ -1,47 +1,160 @@
+// Fix: types/events.ts - Clean up duplicate functions
 export type Calendar = {
   id: string;
-  remoteId?: number; // ✅ ADD: Remote ID for API mapping
+  remoteId?: number;
   name: string;
   hexcode: string;
+  is_private?: boolean; // ✅ ADD: Missing is_private property
 };
 
 export type CalendarEvent = {
   id: string;
   title: string;
-  startDate: string; // YYYY-MM-DD format
-  endDate: string;   // YYYY-MM-DD format  
-  startTime: string | null; // HH:MM:SS format or null
-  endTime: string | null;   // HH:MM:SS format or null
+  startDate: string; // ISO 8601 format: YYYY-MM-DDTHH:MM:SSZ
+  endDate: string;   // ISO 8601 format: YYYY-MM-DDTHH:MM:SSZ
   description?: string;
-  hexcode: string;         // Single color instead of category object
-  timezone: string;        // IANA timezone format (required)
+  hexcode: string;
+  timezone: string;
   location?: string;
-  calendar: string;        // Required calendar name
+  calendar: string;
   invitees?: string[];
   calendarId: string;
 };
 
-// Helper functions for date/time validation and formatting
+// ✅ FIXED: Remove all duplicate functions
 export const dateTimeHelpers = {
-  // Validate YYYY-MM-DD format
-  isValidDate: (dateString: string): boolean => {
-    const regex = /^\d{4}-\d{2}-\d{2}$/;
-    if (!regex.test(dateString)) return false;
+  // ✅ Enhanced validation for ISO 8601 (including +00:00 format from backend)
+  isValidISOString: (isoString: string): boolean => {
+    if (!isoString || typeof isoString !== 'string') {
+      console.error('ISO validation failed: not a string:', typeof isoString, isoString);
+      return false;
+    }
     
-    const date = new Date(dateString + 'T00:00:00');
-    return date.toISOString().split('T')[0] === dateString;
+    try {
+      const date = new Date(isoString);
+      
+      // Check if it's a valid date
+      if (isNaN(date.getTime())) {
+        console.error('ISO validation failed: invalid date:', isoString);
+        return false;
+      }
+      
+      // Check for proper ISO format patterns
+      // Accepts: YYYY-MM-DDTHH:MM:SSZ or YYYY-MM-DDTHH:MM:SS+00:00 or similar
+      const isoPattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?(?:Z|[+-]\d{2}:\d{2})$/;
+      const isValidFormat = isoPattern.test(isoString);
+      
+      if (!isValidFormat) {
+        console.error('ISO validation failed: invalid format:', isoString);
+      }
+      
+      return isValidFormat;
+    } catch (error) {
+      console.error('ISO validation error:', error, 'for string:', isoString);
+      return false;
+    }
   },
 
-  // Validate HH:MM:SS format
-  isValidTime: (timeString: string): boolean => {
-    const regex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$/;
-    return regex.test(timeString);
+  // ✅ Create ISO from components
+  createISOString: (
+    dateString: string, // YYYY-MM-DD
+    timeString: string | null, // HH:MM:SS or null for all-day
+    timezone: string = 'UTC'
+  ): string => {
+    try {
+      if (!timeString) {
+        return `${dateString}T00:00:00Z`;
+      }
+      const localDateTime = new Date(`${dateString}T${timeString}`);
+      return localDateTime.toISOString();
+    } catch (error) {
+      console.error('Error creating ISO string:', error);
+      return `${dateString}T00:00:00Z`;
+    }
   },
 
-  // ✅ Validate IANA timezone format
+  // ✅ All-day event helper
+  createAllDayEventISO: (dateString: string): { start: string; end: string } => {
+    return {
+      start: `${dateString}T00:00:00Z`,
+      end: `${dateString}T23:59:59Z`
+    };
+  },
+
+  // ✅ Extract components from ISO
+  extractDateFromISO: (isoString: string): string => {
+    try {
+      return isoString.split('T')[0];
+    } catch (error) {
+      console.error('Error extracting date from ISO:', error);
+      return '2024-01-01';
+    }
+  },
+
+  extractTimeFromISO: (isoString: string): string | null => {
+    try {
+      const timePart = isoString.split('T')[1];
+      if (!timePart) return null;
+      const timeWithoutZ = timePart.replace('Z', '');
+      return timeWithoutZ.substring(0, 8); // HH:MM:SS
+    } catch (error) {
+      console.error('Error extracting time from ISO:', error);
+      return null;
+    }
+  },
+
+  // ✅ All-day detection
+  isAllDayEvent: (startISO: string, endISO: string): boolean => {
+    try {
+      const startTime = dateTimeHelpers.extractTimeFromISO(startISO);
+      const endTime = dateTimeHelpers.extractTimeFromISO(endISO);
+      const startDate = dateTimeHelpers.extractDateFromISO(startISO);
+      const endDate = dateTimeHelpers.extractDateFromISO(endISO);
+      
+      return startDate === endDate && 
+             startTime === '00:00:00' && 
+             endTime === '23:59:59';
+    } catch (error) {
+      return false;
+    }
+  },
+
+  // ✅ Display formatting
+  formatISOForDisplay: (isoString: string, timezone?: string): string => {
+    try {
+      const date = new Date(isoString);
+      const options: Intl.DateTimeFormatOptions = {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        ...(timezone && { timeZone: timezone })
+      };
+      return date.toLocaleDateString('en-US', options);
+    } catch (error) {
+      return isoString;
+    }
+  },
+
+  formatISOTimeForDisplay: (isoString: string, timezone?: string): string => {
+    try {
+      const date = new Date(isoString);
+      const options: Intl.DateTimeFormatOptions = {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+        ...(timezone && { timeZone: timezone })
+      };
+      return date.toLocaleTimeString('en-US', options);
+    } catch (error) {
+      return dateTimeHelpers.extractTimeFromISO(isoString) || '';
+    }
+  },
+
+  // ✅ Timezone helpers
   isValidTimezone: (timezone: string): boolean => {
     try {
-      // Test if timezone is valid by trying to create a date with it
       Intl.DateTimeFormat(undefined, { timeZone: timezone });
       return true;
     } catch (error) {
@@ -49,17 +162,13 @@ export const dateTimeHelpers = {
     }
   },
 
-  // ✅ Get user's current timezone
   getUserTimezone: (): string => {
     return Intl.DateTimeFormat().resolvedOptions().timeZone;
   },
 
-  // ✅ Get current date in user's timezone
   getTodayStringInTimezone: (timezone?: string): string => {
     try {
       const now = new Date();
-      
-      // If no timezone specified, use simple local date
       if (!timezone) {
         const year = now.getFullYear();
         const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -67,19 +176,14 @@ export const dateTimeHelpers = {
         return `${year}-${month}-${day}`;
       }
       
-      // For specific timezone, use Intl.DateTimeFormat
-      const formatter = new Intl.DateTimeFormat('sv-SE', { // Swedish locale gives YYYY-MM-DD
+      const formatter = new Intl.DateTimeFormat('sv-SE', {
         timeZone: timezone,
         year: 'numeric',
         month: '2-digit',
         day: '2-digit'
       });
-      
-      const dateStr = formatter.format(now);
-      console.log('Current date in timezone:', dateStr, 'for timezone:', timezone);
-      return dateStr;
+      return formatter.format(now);
     } catch (error) {
-      // Fallback to UTC date
       console.error('Invalid timezone, using local date:', error);
       const now = new Date();
       const year = now.getFullYear();
@@ -89,208 +193,179 @@ export const dateTimeHelpers = {
     }
   },
 
-  // Create date string in YYYY-MM-DD format
-  formatDateForStorage: (date: Date): string => {
-    return date.toISOString().split('T')[0];
+  getCurrentISOString: (): string => {
+    return new Date().toISOString();
   },
 
-  // Create time string in HH:MM:SS format
-  formatTimeForStorage: (date: Date): string => {
-    return date.toTimeString().split(' ')[0];
-  },
-
-  // Parse date string to Date object
-  parseDate: (dateString: string): Date => {
-    return new Date(dateString + 'T00:00:00');
-  },
-
-  // ✅ Parse date and time in specific timezone
-  parseDateTimeInTimezone: (dateString: string, timeString: string | null, timezone: string): Date => {
-    if (!timeString) {
-      // All-day event: use start of day in timezone
-      const dateTimeStr = `${dateString}T00:00:00`;
-      return new Date(dateTimeStr);
-    }
-    
-    try {
-      const dateTimeStr = `${dateString}T${timeString}`;
-      const date = new Date(dateTimeStr);
-      
-      // Convert to timezone if needed
-      const offsetMs = date.getTimezoneOffset() * 60 * 1000;
-      return new Date(date.getTime() + offsetMs);
-    } catch (error) {
-      console.error('Error parsing date/time in timezone:', error);
-      return new Date(`${dateString}T${timeString}`);
-    }
-  },
-
-  // Format time for display (HH:MM)
-  formatTimeForDisplay: (timeString: string): string => {
-    return timeString.substring(0, 5); // Remove seconds for display
-  },
-
-  // ✅ Format time for display in specific timezone
-  formatTimeForDisplayInTimezone: (timeString: string, timezone: string): string => {
-    try {
-      const [hours, minutes] = timeString.split(':');
-      const date = new Date();
-      date.setHours(parseInt(hours), parseInt(minutes), 0, 0);
-      
-      return date.toLocaleTimeString('en-US', {
-        timeZone: timezone,
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false
-      });
-    } catch (error) {
-      return timeString.substring(0, 5); // Fallback to simple format
-    }
-  },
-
-  // Format date for display
-  formatDateForDisplay: (dateString: string): string => {
-    if (!dateTimeHelpers.isValidDate(dateString)) {
-      return 'Invalid Date';
-    }
-    const date = dateTimeHelpers.parseDate(dateString);
-    return date.toLocaleDateString('en-US', { 
-      weekday: 'long', 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
-    });
-  },
-
-  // ✅ Format date for display in specific timezone
-  formatDateForDisplayInTimezone: (dateString: string, timezone: string): string => {
-    if (!dateTimeHelpers.isValidDate(dateString)) {
-      return 'Invalid Date';
-    }
-    
-    try {
-      const date = dateTimeHelpers.parseDate(dateString);
-      return date.toLocaleDateString('en-US', {
-        timeZone: timezone,
-        weekday: 'long',
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
-      });
-    } catch (error) {
-      // Fallback to UTC display
-      return dateTimeHelpers.formatDateForDisplay(dateString);
-    }
-  },
-
-  // ✅ Common IANA timezones for dropdown/selection
-  commonTimezones: [
-    'America/New_York',      // Eastern Time
-    'America/Chicago',       // Central Time
-    'America/Denver',        // Mountain Time
-    'America/Los_Angeles',   // Pacific Time
-    'America/Phoenix',       // Arizona (no DST)
-    'America/Anchorage',     // Alaska Time
-    'Pacific/Honolulu',      // Hawaii Time
-    'Europe/London',         // GMT/BST
-    'Europe/Paris',          // CET/CEST
-    'Europe/Berlin',         // CET/CEST
-    'Europe/Rome',           // CET/CEST
-    'Asia/Tokyo',            // JST
-    'Asia/Shanghai',         // CST
-    'Asia/Kolkata',          // IST
-    'Asia/Dubai',            // GST
-    'Australia/Sydney',      // AEDT/AEST
-    'Pacific/Auckland',      // NZDT/NZST
-    'UTC'                    // Coordinated Universal Time
-  ] as const,
-
-  // ✅ Auto-correct date/time for common issues
+  // ✅ Auto-correction for ISO format
   autoCorrectDateTime: (
-    startDate: string,
-    startTime: string | null,
-    endDate: string,
-    endTime: string | null,
+    startISO: string,
+    endISO: string,
     shouldCorrect: boolean = true
   ): { 
     startDate: string; 
-    startTime: string | null; 
-    endDate: string; 
-    endTime: string | null;
+    endDate: string;
     corrected: boolean;
     reason?: string;
   } => {
     if (!shouldCorrect) {
-      return { 
-        startDate, 
-        startTime, 
-        endDate, 
-        endTime, 
-        corrected: false 
-      };
+      return { startDate: startISO, endDate: endISO, corrected: false };
     }
 
-    let correctedStartDate = startDate;
-    let correctedEndDate = endDate;
-    let correctedStartTime = startTime;
-    let correctedEndTime = endTime;
+    let correctedStartDate = startISO;
+    let correctedEndDate = endISO;
     let reason = '';
 
-    // If end date is before start date, swap them
-    if (endDate && startDate && new Date(endDate) < new Date(startDate)) {
-      correctedStartDate = endDate;
-      correctedEndDate = startDate;
-      correctedStartTime = endTime;
-      correctedEndTime = startTime;
-      reason = 'End date was before start date - dates were swapped';
-    }
-
-    // If same date and end time is before start time, adjust end time
-    if (correctedStartDate === correctedEndDate && 
-        correctedStartTime && correctedEndTime &&
-        correctedStartTime > correctedEndTime) {
-      // Add 1 hour to start time for end time
-      const startDateTime = new Date(`${correctedStartDate}T${correctedStartTime}`);
-      startDateTime.setHours(startDateTime.getHours() + 1);
-      correctedEndTime = dateTimeHelpers.formatTimeForStorage(startDateTime);
-      reason = 'End time was before start time - added 1 hour to end time';
-    }
-
-    const hasChanges = (
-      correctedStartDate !== startDate ||
-      correctedStartTime !== startTime ||
-      correctedEndDate !== endDate ||
-      correctedEndTime !== endTime
-    );
-
-    return {
-      startDate: correctedStartDate,
-      startTime: correctedStartTime,
-      endDate: correctedEndDate,
-      endTime: correctedEndTime,
-      corrected: hasChanges,
-      reason: hasChanges ? reason : undefined
-    };
-  },
-
-  // In types/events.ts - Add this function to dateTimeHelpers
-  suggestEndTime: (startTime: string): string => {
     try {
-      const [hours, minutes] = startTime.split(':').map(Number);
-      const startDate = new Date();
-      startDate.setHours(hours, minutes, 0, 0);
-      
-      // Add 1 hour by default
-      const endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
-      
-      // If it goes past midnight, cap at 23:59
-      if (endDate.getDate() !== startDate.getDate()) {
-        return '23:59:00';
+      const startDate = new Date(startISO);
+      const endDate = new Date(endISO);
+
+      if (endDate < startDate) {
+        correctedStartDate = endISO;
+        correctedEndDate = startISO;
+        reason = 'End date was before start date - dates were swapped';
       }
-      
-      return dateTimeHelpers.formatTimeForStorage(endDate);
+
+      if (correctedStartDate === correctedEndDate) {
+        const newEnd = new Date(correctedStartDate);
+        newEnd.setHours(newEnd.getHours() + 1);
+        correctedEndDate = newEnd.toISOString();
+        reason = 'End time was same as start time - added 1 hour';
+      }
+
+      const hasChanges = (correctedStartDate !== startISO || correctedEndDate !== endISO);
+
+      return {
+        startDate: correctedStartDate,
+        endDate: correctedEndDate,
+        corrected: hasChanges,
+        reason: hasChanges ? reason : undefined
+      };
     } catch (error) {
-      return '23:59:00';
+      return { startDate: startISO, endDate: endISO, corrected: false };
     }
   },
+
+  suggestEndISOTime: (startISO: string): string => {
+    try {
+      const startDate = new Date(startISO);
+      const endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
+      return endDate.toISOString();
+    } catch (error) {
+      return startISO;
+    }
+  },
+
+  // ✅ Missing timezone-aware ISO creation
+  createTimezoneAwareISO: (
+    dateString: string, // YYYY-MM-DD
+    timeString: string, // HH:MM:SS
+    timezone: string = 'UTC'
+  ): string => {
+    try {
+      // Create a date object in the specified timezone
+      const dateTime = new Date(`${dateString}T${timeString}`);
+      
+      // For simplicity, convert to UTC (more complex timezone handling would need a library)
+      return dateTime.toISOString();
+    } catch (error) {
+      console.error('Error creating timezone-aware ISO string:', error);
+      return `${dateString}T${timeString}Z`;
+    }
+  },
+
+  // ✅ Legacy helpers for backward compatibility
+  parseDate: (dateString: string): Date => {
+    try {
+      const [year, month, day] = dateString.split('-').map(Number);
+      return new Date(year, month - 1, day);
+    } catch (error) {
+      console.error('Error parsing date:', error);
+      return new Date();
+    }
+  },
+
+  formatDateForStorage: (date: Date): string => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  },
+
+  formatTimeForStorage: (date: Date): string => {
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const seconds = String(date.getSeconds()).padStart(2, '0');
+    return `${hours}:${minutes}:${seconds}`;
+  },
+
+  formatDateForDisplay: (dateString: string): string => {
+    try {
+      const date = dateTimeHelpers.parseDate(dateString);
+      return date.toLocaleDateString('en-US', {
+        weekday: 'long',
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric'
+      });
+    } catch (error) {
+      return dateString;
+    }
+  },
+
+  formatTimeForDisplay: (timeString: string): string => {
+    try {
+      const [hours, minutes] = timeString.split(':').map(Number);
+      const date = new Date();
+      date.setHours(hours, minutes, 0, 0);
+      return date.toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+      });
+    } catch (error) {
+      return timeString;
+    }
+  },
+
+  // ✅ ADD: Format date range for search display
+  formatDateRange: (event: CalendarEvent, showTimezone: boolean = false): string => {
+    const startDateStr = dateTimeHelpers.extractDateFromISO(event.startDate);
+    const endDateStr = dateTimeHelpers.extractDateFromISO(event.endDate);
+    
+    const startDate = dateTimeHelpers.parseDate(startDateStr);
+    const endDate = dateTimeHelpers.parseDate(endDateStr);
+    
+    const formatOptions: Intl.DateTimeFormatOptions = { 
+      weekday: 'short', 
+      year: 'numeric', 
+      month: 'short', 
+      day: 'numeric' 
+    };
+    
+    if (showTimezone) {
+      formatOptions.timeZone = event.timezone;
+    }
+    
+    if (endDate.getTime() === startDate.getTime()) {
+      return startDate.toLocaleDateString('en-US', formatOptions);
+    }
+    
+    const startStr = startDate.toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric',
+      ...(showTimezone && { timeZone: event.timezone })
+    });
+    const endStr = endDate.toLocaleDateString('en-US', formatOptions);
+    
+    return `${startStr} - ${endStr}`;
+  },
+
+  // Keep existing common timezones
+  commonTimezones: [
+    'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles',
+    'America/Phoenix', 'America/Anchorage', 'Pacific/Honolulu', 'Europe/London',
+    'Europe/Paris', 'Europe/Berlin', 'Europe/Rome', 'Asia/Tokyo', 'Asia/Shanghai',
+    'Asia/Kolkata', 'Asia/Dubai', 'Australia/Sydney', 'Pacific/Auckland', 'UTC'
+  ] as const,
 };

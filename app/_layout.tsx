@@ -31,7 +31,7 @@ function RootLayoutContent() {
         headerShown: false,
         animation: 'slide_from_right',
         presentation: 'card',
-        gestureEnabled: false,
+        gestureEnabled: true,
       }}
     >
       {screens}

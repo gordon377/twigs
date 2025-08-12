@@ -1,227 +1,348 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Modal, Platform, Animated } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Platform, Modal } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { colors } from '@/styles/styles';
 import { dateTimeHelpers } from '@/types/events';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import DateTimePicker from '@react-native-community/datetimepicker';
 
-interface DateTimePickerProps {
-  startDate: string;
-  endDate: string;
-  startTime?: string;
-  endTime?: string;
+interface EventDateTimePickerProps {
+  startDate: string; // ISO 8601 format
+  endDate: string;   // ISO 8601 format
   isAllDay: boolean;
-  onDateChange: (type: 'start' | 'end', value: string) => void;
-  onTimeChange: (type: 'start' | 'end', value: string) => void;
+  onDateTimeChange: (type: 'start' | 'end', isoString: string) => void;
 }
 
-export function EventDateTimePicker({ 
-  startDate, 
-  endDate, 
-  startTime, 
-  endTime, 
-  isAllDay, 
-  onDateChange, 
-  onTimeChange 
-}: DateTimePickerProps) {
-  const [showModal, setShowModal] = useState(false);
-  const [pickerTarget, setPickerTarget] = useState<'start' | 'end'>('start');
-  const [pickerMode, setPickerMode] = useState<'date' | 'time'>('date');
-  const [tempValue, setTempValue] = useState(new Date());
-  
-  const modalAnimations = {
-    opacity: React.useRef(new Animated.Value(0)).current,
-    translateY: React.useRef(new Animated.Value(300)).current,
+export const EventDateTimePicker: React.FC<EventDateTimePickerProps> = ({
+  startDate,
+  endDate,
+  isAllDay,
+  onDateTimeChange,
+}) => {
+  const [showPicker, setShowPicker] = useState<{
+    type: 'start' | 'end';
+    mode: 'date' | 'time';
+  } | null>(null);
+
+  // ✅ Helper to get current Date object from ISO string
+  const getDateFromISO = (isoString: string): Date => {
+    try {
+      return new Date(isoString);
+    } catch (error) {
+      console.error('Error parsing ISO date:', error);
+      return new Date();
+    }
   };
 
-  const formatTimeForDisplay = (timeStr?: string) => {
-    if (!timeStr) return '';
-    const [hours, minutes] = timeStr.split(':');
-    const hour = parseInt(hours);
-    const displayHour = hour % 12 || 12;
-    return `${displayHour}:${minutes} ${hour >= 12 ? 'PM' : 'AM'}`;
-  };
+  const handleDateTimeChange = (event: any, selectedDate?: Date) => {
+    if (Platform.OS === 'android') {
+      setShowPicker(null);
+    }
+    
+    if (!selectedDate || !showPicker) return;
 
-  const formatDateForDisplay = (dateStr: string) => {
-    if (!dateStr) return '';
-    const [year, month, day] = dateStr.split('-').map(Number);
-    const date = new Date(year, month - 1, day);
-    return new Intl.DateTimeFormat('en-US', {
-      weekday: 'long',
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
-    }).format(date);
-  };
-
-  const openPicker = (target: 'start' | 'end', mode: 'date' | 'time') => {
-    setPickerTarget(target);
-    setPickerMode(mode);
+    const { type, mode } = showPicker;
     
     if (mode === 'date') {
-      setTempValue(new Date(target === 'start' ? startDate : endDate));
-    } else {
-      const currentTime = target === 'start' ? startTime : endTime;
-      if (currentTime) {
-        const [hours, minutes] = currentTime.split(':');
-        const timeDate = new Date();
-        timeDate.setHours(parseInt(hours), parseInt(minutes), 0);
-        setTempValue(timeDate);
-      }
+      // ✅ For date changes, preserve time component
+      const currentISO = type === 'start' ? startDate : endDate;
+      const currentTime = dateTimeHelpers.extractTimeFromISO(currentISO) || '12:00:00';
+      const newDateStr = dateTimeHelpers.formatDateForStorage(selectedDate);
+      const newISO = dateTimeHelpers.createISOString(newDateStr, currentTime);
+      onDateTimeChange(type, newISO);
+    } else if (mode === 'time') {
+      // ✅ For time changes, preserve date component
+      const currentISO = type === 'start' ? startDate : endDate;
+      const currentDateStr = dateTimeHelpers.extractDateFromISO(currentISO);
+      const newTimeStr = dateTimeHelpers.formatTimeForStorage(selectedDate);
+      const newISO = dateTimeHelpers.createISOString(currentDateStr, newTimeStr);
+      onDateTimeChange(type, newISO);
     }
-    
-    setShowModal(true);
-    modalAnimations.opacity.setValue(0);
-    modalAnimations.translateY.setValue(300);
-    
-    Animated.parallel([
-      Animated.timing(modalAnimations.opacity, { toValue: 1, duration: 300, useNativeDriver: true }),
-      Animated.spring(modalAnimations.translateY, { toValue: 0, tension: 120, friction: 8, useNativeDriver: true }),
-    ]).start();
-  };
 
-  const closePicker = () => {
-    Animated.parallel([
-      Animated.timing(modalAnimations.opacity, { toValue: 0, duration: 250, useNativeDriver: true }),
-      Animated.timing(modalAnimations.translateY, { toValue: 300, duration: 250, useNativeDriver: true }),
-    ]).start(() => setShowModal(false));
-  };
-
-  const confirmSelection = () => {
-    if (pickerMode === 'date') {
-      const dateStr = dateTimeHelpers.formatDateForStorage(tempValue);
-      onDateChange(pickerTarget, dateStr);
-    } else {
-      const timeStr = dateTimeHelpers.formatTimeForStorage(tempValue);
-      onTimeChange(pickerTarget, timeStr);
+    if (Platform.OS === 'ios') {
+      setShowPicker(null);
     }
-    closePicker();
   };
 
-  const renderButton = (type: 'start' | 'end', mode: 'date' | 'time') => {
-    const isDate = mode === 'date';
-    const value = isDate 
-      ? formatDateForDisplay(type === 'start' ? startDate : endDate)
-      : formatTimeForDisplay(type === 'start' ? startTime : endTime);
-    
-    return (
-      <TouchableOpacity 
-        style={isDate ? styles.dateButton : styles.timeButton}
-        onPress={() => openPicker(type, mode)}
-      >
-        <Ionicons 
-          name={isDate ? "calendar-outline" : "time-outline"} 
-          size={16} 
-          color={isDate ? colors.primary : colors.white} 
-        />
-        <Text style={isDate ? styles.dateButtonText : styles.timeButtonText}>
-          {value}
-        </Text>
-      </TouchableOpacity>
-    );
+  const showDateTimePicker = (type: 'start' | 'end', mode: 'date' | 'time') => {
+    setShowPicker({ type, mode });
   };
+
+  const getCurrentPickerValue = (): Date => {
+    if (!showPicker) return new Date();
+    return getDateFromISO(showPicker.type === 'start' ? startDate : endDate);
+  };
+
+  // ✅ Format for display
+  const formatDateForDisplay = (isoString: string): string => {
+    try {
+      const date = getDateFromISO(isoString);
+      return date.toLocaleDateString('en-US', {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+      });
+    } catch (error) {
+      return isoString;
+    }
+  };
+
+  const formatTimeForDisplay = (isoString: string): string => {
+    if (isAllDay) return 'All day';
+    
+    try {
+      const date = getDateFromISO(isoString);
+      return date.toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+      });
+    } catch (error) {
+      return isoString;
+    }
+  };
+
+  const isMultiDay = dateTimeHelpers.extractDateFromISO(startDate) !== 
+                    dateTimeHelpers.extractDateFromISO(endDate);
 
   return (
-    <>
-      {/* Start Date/Time */}
+    <View style={styles.container}>
+      {/* Date Section */}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
-          <Ionicons name="play" size={16} color={colors.success} />
-          <Text style={styles.sectionLabel}>STARTS</Text>
+          <Ionicons name="calendar-outline" size={20} color={colors.primary} />
+          <Text style={styles.sectionTitle}>Date</Text>
         </View>
+        
         <View style={styles.dateTimeRow}>
-          {renderButton('start', 'date')}
-          {!isAllDay && renderButton('start', 'time')}
+          <TouchableOpacity
+            style={styles.dateTimeButton}
+            onPress={() => showDateTimePicker('start', 'date')}
+          >
+            <Text style={styles.dateTimeLabel}>From</Text>
+            <Text style={styles.dateTimeValue}>{formatDateForDisplay(startDate)}</Text>
+          </TouchableOpacity>
+
+          <View style={styles.separator}>
+            <View style={styles.separatorLine} />
+          </View>
+
+          <TouchableOpacity
+            style={styles.dateTimeButton}
+            onPress={() => showDateTimePicker('end', 'date')}
+          >
+            <Text style={styles.dateTimeLabel}>To</Text>
+            <Text style={styles.dateTimeValue}>{formatDateForDisplay(endDate)}</Text>
+          </TouchableOpacity>
         </View>
+
+        {isMultiDay && (
+          <View style={styles.multiDayIndicator}>
+            <Ionicons name="calendar" size={16} color={colors.warning} />
+            <Text style={styles.multiDayText}>Multi-day event</Text>
+          </View>
+        )}
       </View>
 
-      {/* End Date/Time */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Ionicons name="stop" size={16} color={colors.danger} />
-          <Text style={styles.sectionLabel}>ENDS</Text>
-        </View>
-        <View style={styles.dateTimeRow}>
-          {renderButton('end', 'date')}
-          {!isAllDay && renderButton('end', 'time')}
-        </View>
-      </View>
-
-      {/* Picker Modal */}
-      <Modal visible={showModal} transparent animationType="none">
-        <Animated.View style={[styles.modalOverlay, { opacity: modalAnimations.opacity }]}>
-          <TouchableOpacity style={styles.modalBackdrop} onPress={closePicker} />
+      {/* Time Section - Only show if not all-day */}
+      {!isAllDay && (
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Ionicons name="time-outline" size={20} color={colors.success} />
+            <Text style={styles.sectionTitle}>Time</Text>
+          </View>
           
-          <Animated.View style={[styles.modalContainer, { transform: [{ translateY: modalAnimations.translateY }] }]}>
-            <View style={styles.modalHeader}>
-              <TouchableOpacity onPress={closePicker}>
-                <Text style={styles.cancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <Text style={styles.modalTitle}>
-                {pickerMode === 'date' ? 'Select Date' : 'Select Time'}
+          <View style={styles.dateTimeRow}>
+            <TouchableOpacity
+              style={styles.dateTimeButton}
+              onPress={() => showDateTimePicker('start', 'time')}
+            >
+              <Text style={styles.dateTimeLabel}>From</Text>
+              <Text style={styles.dateTimeValue}>
+                {formatTimeForDisplay(startDate)}
               </Text>
-              <TouchableOpacity style={styles.doneButton} onPress={confirmSelection}>
-                <Text style={styles.doneText}>Done</Text>
-              </TouchableOpacity>
-            </View>
-            
-            <View style={styles.pickerContainer}>
-              <DateTimePicker
-                value={tempValue}
-                mode={pickerMode}
-                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                onChange={(event, selectedDate) => selectedDate && setTempValue(selectedDate)}
-                style={styles.picker}
-                textColor={colors.text}
-                accentColor={colors.primary}
-                minuteInterval={5}
-              />
-            </View>
-          </Animated.View>
-        </Animated.View>
-      </Modal>
-    </>
-  );
-}
+            </TouchableOpacity>
 
+            <View style={styles.separator}>
+              <View style={styles.separatorLine} />
+            </View>
+
+            <TouchableOpacity
+              style={styles.dateTimeButton}
+              onPress={() => showDateTimePicker('end', 'time')}
+            >
+              <Text style={styles.dateTimeLabel}>To</Text>
+              <Text style={styles.dateTimeValue}>
+                {formatTimeForDisplay(endDate)}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* Modal for Picker */}
+      {showPicker && (
+        <Modal
+          visible={true}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowPicker(null)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <TouchableOpacity onPress={() => setShowPicker(null)}>
+                  <Text style={styles.cancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <Text style={styles.modalTitle}>
+                  {showPicker.mode === 'date' ? 'Select Date' : 'Select Time'}
+                </Text>
+                <TouchableOpacity onPress={() => setShowPicker(null)}>
+                  <Text style={styles.doneText}>Done</Text>
+                </TouchableOpacity>
+              </View>
+              
+              <View style={styles.pickerWrapper}>
+                <DateTimePicker
+                  value={getCurrentPickerValue()}
+                  mode={showPicker.mode}
+                  is24Hour={false}
+                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                  onChange={handleDateTimeChange}
+                  style={styles.picker}
+                  textColor={colors.text}
+                />
+              </View>
+            </View>
+          </View>
+        </Modal>
+      )}
+    </View>
+  );
+};
+
+// ✅ FIXED: Use correct color properties
 const styles = StyleSheet.create({
-  section: { marginBottom: 16 },
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
-  sectionLabel: {
-    fontSize: 11, fontWeight: '700', color: colors.textSecondary,
-    textTransform: 'uppercase', letterSpacing: 0.8,
+  container: {
+    gap: 20,
   },
-  dateTimeRow: { flexDirection: 'row', gap: 10 },
-  dateButton: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: colors.primaryLight, paddingHorizontal: 14, paddingVertical: 12,
-    borderRadius: 10, borderWidth: 1, borderColor: colors.primary + '20',
+  section: {
+    gap: 12,
   },
-  dateButtonText: { fontSize: 15, color: colors.text, fontWeight: '600' },
-  timeButton: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: colors.primary, paddingHorizontal: 14, paddingVertical: 12,
-    borderRadius: 10, minWidth: 110,
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
-  timeButtonText: { fontSize: 15, color: colors.white, fontWeight: '600' },
-  
-  // Modal styles
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'flex-end' },
-  modalBackdrop: { flex: 1, width: '100%' },
-  modalContainer: {
-    backgroundColor: colors.background, borderTopLeftRadius: 20, borderTopRightRadius: 20,
-    paddingBottom: Platform.OS === 'ios' ? 30 : 16,
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  dateTimeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  dateTimeButton: {
+    flex: 1,
+    backgroundColor: colors.cardBackground, // ✅ Use existing color
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: colors.cardBorder, // ✅ Use existing color
+  },
+  dateTimeLabel: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    fontWeight: '500',
+    marginBottom: 4,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  dateTimeValue: {
+    fontSize: 16,
+    color: colors.text,
+    fontWeight: '600',
+  },
+  separator: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 20,
+  },
+  separatorLine: {
+    width: 12,
+    height: 2,
+    backgroundColor: colors.textMuted,
+    borderRadius: 1,
+  },
+  multiDayIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: colors.warningLight,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+  },
+  multiDayText: {
+    fontSize: 12,
+    color: colors.warning,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: colors.background,
+    borderRadius: 20,
+    width: '100%',
+    maxWidth: 400,
+    maxHeight: '80%',
+    shadowColor: colors.black,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 10,
   },
   modalHeader: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1,
-    borderBottomColor: colors.cardBorder, backgroundColor: colors.cardBackground,
-    borderTopLeftRadius: 20, borderTopRightRadius: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.cardBorder,
   },
-  modalTitle: { fontSize: 18, fontWeight: '700', color: colors.text, flex: 1, textAlign: 'center' },
-  cancelText: { fontSize: 16, color: colors.textMuted, fontWeight: '600' },
-  doneButton: { paddingVertical: 8, paddingHorizontal: 16, backgroundColor: colors.primary, borderRadius: 8 },
-  doneText: { fontSize: 16, color: colors.white, fontWeight: '700' },
-  pickerContainer: { paddingVertical: 20, alignItems: 'center', minHeight: 200 },
-  picker: { width: '100%', height: 200, backgroundColor: colors.background },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  cancelText: {
+    fontSize: 16,
+    color: colors.textMuted,
+    fontWeight: '600',
+  },
+  doneText: {
+    fontSize: 16,
+    color: colors.primary,
+    fontWeight: '700',
+  },
+  pickerWrapper: {
+    padding: 20,
+    alignItems: 'center',
+    minHeight: 200,
+    justifyContent: 'center',
+  },
+  picker: {
+    width: '100%',
+    backgroundColor: colors.background,
+  },
 });

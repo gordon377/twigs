@@ -8,13 +8,11 @@ import {
   Easing, 
   PanResponder, 
   Modal, 
-  TouchableOpacity,
-  GestureResponderEvent,
-  PanResponderGestureState
+  TouchableOpacity
 } from 'react-native';
 import PagerView from 'react-native-pager-view';
 import { toDateId } from '@marceloterreiro/flash-calendar';
-import { colors, commonStyles } from '@/styles/styles';
+import { colors } from '@/styles/styles';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CalendarHeader } from '@/components/Drawer';
 import { EventsList, SingleDateCalendar } from '@/components/Calendar';
@@ -23,33 +21,105 @@ import { DotIndicator } from '@/components/DotIndicator';
 import { useEvents } from '@/hooks/useEvents';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
+import EventSearch from '@/components/EventForm/EventSearch';
 
-// ✅ Move helper functions outside component to prevent recreation
+// ✅ Constants
+const VELOCITY_THRESHOLD = 1.5;
+const ANIMATION_DURATION = 250;
+const GESTURE_THRESHOLD = 8;
+
+// ✅ Helper functions
 const getDimensions = () => Dimensions.get('window');
 
-function monthIncrement(today: any, increment: number) {
-  const next = new Date(today);
-  next.setMonth(next.getMonth() + increment);
-  return toDateId(next);
-}
-
-// ✅ Move constants outside component
-const VELOCITY_THRESHOLD = 1.5;
-const ANIMATION_DURATION = 300;
+// ✅ FIXED: Create today value as a regular function (not hook)
+const createTodayValue = (): string => {
+  try {
+    // Method 1: Try flash-calendar's toDateId
+    const todayFromFlash = toDateId(new Date());
+    console.log('📅 Today from flash-calendar:', todayFromFlash);
+    
+    // Validate the format with more robust regex
+    if (todayFromFlash && /^\d{4}-\d{2}-\d{2}$/.test(todayFromFlash)) {
+      const parts = todayFromFlash.split('-');
+      const year = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10);
+      const day = parseInt(parts[2], 10);
+      
+      // Validate ranges
+      if (year >= 1900 && year <= 2100 && 
+          month >= 1 && month <= 12 && 
+          day >= 1 && day <= 31) {
+        console.log('✅ Valid today from flash-calendar:', todayFromFlash);
+        return todayFromFlash;
+      }
+    }
+    
+    console.warn('⚠️ Invalid today from flash-calendar, creating fallback');
+    
+    // Method 2: Create manually with validation
+    const now = new Date();
+    
+    // Validate the current date
+    if (isNaN(now.getTime())) {
+      throw new Error('System date is invalid');
+    }
+    
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const fallbackToday = `${year}-${month}-${day}`;
+    
+    console.log('✅ Fallback today created:', fallbackToday);
+    return fallbackToday;
+    
+  } catch (error) {
+    console.error('❌ Error creating today date:', error);
+    
+    // Emergency fallback - use a fixed known good date
+    const emergencyDate = '2025-08-11';
+    console.log('🆘 Using emergency fallback date:', emergencyDate);
+    return emergencyDate;
+  }
+};
 
 export default function CalendarScreen() {
-  const today = toDateId(new Date());
+  // ✅ FIXED: Create today value inside the component
+  const today = useMemo(() => createTodayValue(), []);
+
+  // ✅ State management
   const [selectedDate, setSelectedDate] = useState(today);
   const [showOptionsDropdown, setShowOptionsDropdown] = useState(false);
+  const [showSearchModal, setShowSearchModal] = useState(false);
   const [currentPage, setCurrentPage] = useState(0);
-  const pagerRef = useRef<PagerView>(null);
-
-  const { hasEventsOnDate, isLoadingEvents } = useEvents();
-  
-  // ✅ Memoize screen dimensions
   const [screenDimensions, setScreenDimensions] = useState(getDimensions());
+  const [isNavigatingToToday, setIsNavigatingToToday] = useState(false);
   
-  // ✅ Memoize responsive heights - only recalculate when dimensions change
+  // ✅ Refs
+  const pagerRef = useRef<PagerView>(null);
+  const eventsListHeight = useRef(new Animated.Value(0)).current;
+  const currentHeightRef = useRef(0);
+  const isGesturingRef = useRef(false);
+  const isInitializedRef = useRef(false);
+  const calendarRef = useRef<any>(null);
+
+  // ✅ Hooks
+  const { hasEventsOnDate, isLoadingEvents, initializeCalendarsFromAPI } = useEvents();
+
+  // ✅ Initialize calendars
+  useEffect(() => {
+    const initializeCalendars = async () => {
+      try {
+        if (initializeCalendarsFromAPI) {
+          await initializeCalendarsFromAPI();
+        }
+      } catch (error) {
+        console.error('Failed to initialize calendars:', error);
+      }
+    };
+    initializeCalendars();
+  }, [initializeCalendarsFromAPI]);
+
+  // ✅ Memoized calculations
   const responsiveHeights = useMemo(() => {
     const { height } = screenDimensions;
     return {
@@ -60,82 +130,185 @@ export default function CalendarScreen() {
   }, [screenDimensions]);
 
   const { minHeight, maxHeight, defaultHeight } = responsiveHeights;
-  
-  // ✅ Stable callback references
+
+  const hasEvents = useMemo(() => {
+    return hasEventsOnDate(selectedDate);
+  }, [selectedDate, hasEventsOnDate]);
+
+  // ✅ Initialize height once
+  useEffect(() => {
+    if (!isInitializedRef.current) {
+      const initialHeight = hasEvents ? defaultHeight : minHeight;
+      currentHeightRef.current = initialHeight;
+      eventsListHeight.setValue(initialHeight);
+      isInitializedRef.current = true;
+    }
+  }, [hasEvents, defaultHeight, minHeight, eventsListHeight]);
+
+  // ✅ Smart height animation
+  useEffect(() => {
+    if (!isInitializedRef.current || currentPage !== 0 || isGesturingRef.current) return;
+    
+    const targetHeight = hasEvents ? defaultHeight : minHeight;
+    
+    if (Math.abs(currentHeightRef.current - targetHeight) > 5) {
+      currentHeightRef.current = targetHeight;
+      
+      // ✅ Use spring animation for more natural feel
+      Animated.spring(eventsListHeight, {
+        toValue: targetHeight,
+        useNativeDriver: false,
+        tension: 80,   // Slightly less stiff than navigate
+        friction: 10,  // More damping for gentler auto-adjustments
+        velocity: 0,
+      }).start();
+    }
+  }, [hasEvents, defaultHeight, minHeight, currentPage]);
+
+  // ✅ Optimized callbacks
   const handleDateChange = useCallback((date: string) => {
     setSelectedDate(date);
   }, []);
 
   const handlePageChange = useCallback((event: any) => {
-    const newPage = event.nativeEvent.position;
-    setCurrentPage(newPage);
+    setCurrentPage(event.nativeEvent.position);
   }, []);
 
-  // ✅ Debounced hasEvents calculation
-  const hasEvents = useMemo(() => {
-    return hasEventsOnDate(selectedDate);
-  }, [selectedDate, hasEventsOnDate]);
-
-  // Animation refs
-  const eventsListHeight = useRef(new Animated.Value(defaultHeight)).current;
-  const panY = useRef(new Animated.Value(0)).current;
-  const currentHeightRef = useRef(defaultHeight);
-  const isGesturingRef = useRef(false); // ✅ ADDED: Track gesture state
-
-  // ✅ FIXED: Prevent animation conflicts during gestures
-  useEffect(() => {
-    if (currentPage !== 0 || isGesturingRef.current) return; // ✅ Skip if gesturing
+  const navigateToToday = useCallback(async () => {
+    if (isNavigatingToToday) return;
     
-    const animationTimer = setTimeout(() => {
-      const targetHeight = hasEvents ? defaultHeight : minHeight;
-      
-      // ✅ Only animate if height actually needs to change AND not gesturing
-      if (Math.abs(currentHeightRef.current - targetHeight) > 1) {
-        currentHeightRef.current = targetHeight;
-        
-        Animated.timing(eventsListHeight, {
-          toValue: targetHeight,
-          duration: 200,
-          useNativeDriver: false,
-          easing: Easing.out(Easing.cubic),
-        }).start();
+    console.log('🏠 Starting seamless navigation to today:', today);
+    
+    setIsNavigatingToToday(true);
+    setShowOptionsDropdown(false);
+    
+    try {
+      // ✅ Step 1: Ensure we're on the calendar page
+      if (currentPage !== 0) {
+        setCurrentPage(0);
+        pagerRef.current?.setPage(0);
+        // Wait for page transition to complete
+        await new Promise(resolve => setTimeout(resolve, 150));
       }
-    }, 50);
 
-    return () => clearTimeout(animationTimer);
-  }, [hasEvents, defaultHeight, minHeight, currentPage, eventsListHeight]);
+      // ✅ Step 2: Start calendar transition (will be invisible during re-render)
+      let calendarTransitionCompleted = false;
+      const calendarPromise = new Promise<void>(async (resolve) => {
+        try {
+          if (calendarRef.current?.scrollToToday) {
+            console.log('📅 Starting seamless calendar transition...');
+            await calendarRef.current.scrollToToday();
+            calendarTransitionCompleted = true;
+            console.log('✅ Seamless calendar transition completed');
+          } else {
+            console.log('⚠️ scrollToToday method not available');
+            setSelectedDate(today);
+            calendarTransitionCompleted = true;
+          }
+          resolve();
+        } catch (error) {
+          console.error('❌ Error during calendar transition:', error);
+          setSelectedDate(today);
+          calendarTransitionCompleted = true;
+          resolve();
+        }
+      });
 
-  // ✅ FIXED: Better PanResponder to prevent micro jumps
-  const panResponder = useMemo(() => PanResponder.create({
-    onStartShouldSetPanResponder: (evt, gestureState) => {
-      if (currentPage !== 0) return false;
+      // ✅ Step 3: Coordinate height animation with calendar transition
+      const heightPromise = new Promise<void>((resolve) => {
+        // Wait a bit for calendar transition to start
+        setTimeout(() => {
+          try {
+            const hasEventsToday = hasEventsOnDate(today);
+            const targetHeight = hasEventsToday ? defaultHeight : minHeight;
+            
+            console.log('📏 Coordinating height animation:', targetHeight, 'hasEvents:', hasEventsToday);
+            
+            eventsListHeight.stopAnimation();
+            currentHeightRef.current = targetHeight;
+            
+            // ✅ Use spring animation that complements the calendar transition
+            Animated.spring(eventsListHeight, {
+              toValue: targetHeight,
+              useNativeDriver: false,
+              tension: 90,
+              friction: 9,
+              velocity: 0,
+            }).start(() => {
+              console.log('✅ Height animation completed');
+              resolve();
+            });
+            
+          } catch (error) {
+            console.error('❌ Error during height animation:', error);
+            resolve();
+          }
+        }, 100); // Start slightly after calendar transition begins
+      });
+
+      // ✅ Wait for both animations to complete
+      await Promise.all([calendarPromise, heightPromise]);
       
-      const touchY = evt.nativeEvent.locationY;
-      return touchY < 50;
+      console.log('✅ All seamless animations completed');
+
+    } catch (error) {
+      console.error('❌ Error during seamless navigation:', error);
+    } finally {
+      // ✅ Clear loading state after everything is complete
+      setTimeout(() => {
+        setIsNavigatingToToday(false);
+      }, 100); // Brief delay to ensure everything settles
+    }
+  }, [hasEventsOnDate, defaultHeight, minHeight, eventsListHeight, today, isNavigatingToToday, currentPage]);
+
+  const navigateToCalendars = useCallback(() => {
+    setShowOptionsDropdown(false);
+    router.push('/(tabs)/calendar/manageCalendars');
+  }, []);
+
+  const navigateToAllEvents = useCallback(() => {
+    setShowOptionsDropdown(false);
+    setCurrentPage(1);
+    pagerRef.current?.setPage(1);
+  }, []);
+
+  const navigateToCreateEvent = useCallback(() => {
+    router.push(`/(tabs)/calendar/createEvent?selectedDate=${selectedDate}`);
+  }, [selectedDate]);
+
+  // ✅ NEW: Search function
+  const handleSearch = useCallback(() => {
+    setShowSearchModal(true);
+  }, []);
+
+  const handleCloseSearch = useCallback(() => {
+    setShowSearchModal(false);
+  }, []);
+
+  // ✅ Optimized PanResponder
+  const panResponder = useMemo(() => PanResponder.create({
+    onStartShouldSetPanResponder: (evt) => {
+      if (currentPage !== 0) return false;
+      return evt.nativeEvent.locationY < 50;
     },
     
     onMoveShouldSetPanResponder: (evt, gestureState) => {
       if (currentPage !== 0) return false;
-      
       const { dx, dy } = gestureState;
-      return Math.abs(dy) > 8 && Math.abs(dy) > Math.abs(dx); // ✅ Increased threshold
+      return Math.abs(dy) > GESTURE_THRESHOLD && Math.abs(dy) > Math.abs(dx);
     },
     
     onPanResponderGrant: () => {
-      isGesturingRef.current = true; // ✅ ADDED: Mark as gesturing
-      eventsListHeight.stopAnimation(); // ✅ ADDED: Stop any ongoing animations
+      isGesturingRef.current = true;
+      eventsListHeight.stopAnimation();
       eventsListHeight.setOffset(currentHeightRef.current);
       eventsListHeight.setValue(0);
-      panY.setValue(0); // ✅ ADDED: Reset panY
     },
     
     onPanResponderMove: (_, gestureState) => {
       if (currentPage !== 0) return;
-      
       const newHeight = currentHeightRef.current - gestureState.dy;
       const clampedHeight = Math.max(minHeight, Math.min(maxHeight, newHeight));
-      
-      // ✅ FIXED: Use eventsListHeight directly instead of panY
       eventsListHeight.setValue(clampedHeight - currentHeightRef.current);
     },
     
@@ -143,13 +316,10 @@ export default function CalendarScreen() {
       if (currentPage !== 0) return;
       
       eventsListHeight.flattenOffset();
-      panY.setValue(0); // ✅ ADDED: Reset panY
-      
       const velocityY = gestureState.vy;
       const newHeight = currentHeightRef.current - gestureState.dy;
       
       let finalHeight: number;
-      
       if (Math.abs(velocityY) > VELOCITY_THRESHOLD) {
         finalHeight = velocityY > 0 ? minHeight : maxHeight;
       } else {
@@ -160,28 +330,22 @@ export default function CalendarScreen() {
       finalHeight = Math.max(minHeight, Math.min(maxHeight, finalHeight));
       currentHeightRef.current = finalHeight;
       
-      // ✅ FIXED: Smoother animation after gesture
       Animated.timing(eventsListHeight, {
         toValue: finalHeight,
-        duration: 250, // ✅ Slightly longer for smoother transition
+        duration: ANIMATION_DURATION,
         useNativeDriver: false,
-        easing: Easing.out(Easing.quad), // ✅ Gentler easing
+        easing: Easing.out(Easing.quad),
       }).start(() => {
-        isGesturingRef.current = false; // ✅ ADDED: Mark gesture as complete
+        isGesturingRef.current = false;
       });
     },
     
     onPanResponderTerminate: () => {
-      panY.setValue(0);
-      isGesturingRef.current = false; // ✅ ADDED: Reset gesture state
+      isGesturingRef.current = false;
     },
-    
-    onPanResponderTerminationRequest: () => false,
-    
-    onShouldBlockNativeResponder: () => true,
-  }), [currentPage, minHeight, maxHeight, eventsListHeight, panY]);
+  }), [currentPage, minHeight, maxHeight, eventsListHeight]);
 
-  // ✅ Memoize configuration objects
+  // ✅ UPDATED: Memoized configurations with search
   const rightActions = useMemo(() => [
     {
       icon: <Ionicons name="options-outline" size={24} color="#070c1f" />,
@@ -189,63 +353,59 @@ export default function CalendarScreen() {
     },
     {
       icon: <Ionicons name="search" size={24} color="#070c1f" />,
-      onPress: () => { /* handle search */ },
+      onPress: handleSearch,
     },
     {
       icon: <Ionicons name="add-sharp" size={24} color="#070c1f" />,
-      onPress: () => {
-        router.push(`/(tabs)/calendar/createEvent?selectedDate=${selectedDate}`);
-      },
+      onPress: navigateToCreateEvent,
     },
-  ], [selectedDate]);
+  ], [navigateToCreateEvent, handleSearch]);
 
   const optionsMenuItems = useMemo(() => [
     {
       id: '1',
-      title: 'Back to Today',
-      icon: 'today-outline',
-      onPress: () => {
-        setShowOptionsDropdown(false);
-        if (pagerRef.current) {
-          pagerRef.current.setPage(0);
-        }
-        setCurrentPage(0);
-        setSelectedDate(today);
-      }
+      title: isNavigatingToToday ? 'Navigating...' : 'Back to Today',
+      icon: isNavigatingToToday ? 'hourglass-outline' as const : 'today-outline' as const,
+      onPress: navigateToToday,
+      disabled: isNavigatingToToday,
     },
     {
       id: '2',
       title: 'Calendars',
-      icon: 'ellipse-outline',
-      onPress: () => {
-        setShowOptionsDropdown(false);
-        router.push(`/(tabs)/calendar/manageCalendars`);
-      }
+      icon: 'ellipse-outline' as const,
+      onPress: navigateToCalendars,
     },
     {
       id: '3',
       title: 'All Events',
-      icon: 'list-outline',
+      icon: 'list-outline' as const,
+      onPress: navigateToAllEvents,
+    },
+    {
+      id: '4',
+      title: 'Search Events',
+      icon: 'search-outline' as const,
       onPress: () => {
         setShowOptionsDropdown(false);
-        if (pagerRef.current) {
-          pagerRef.current.setPage(1);
-        }
-        setCurrentPage(1);
-      }
+        handleSearch();
+      },
     }
-  ], [today]);
+  ], [navigateToToday, navigateToCalendars, navigateToAllEvents, handleSearch, isNavigatingToToday]);
 
-  const pages = useMemo(() => [
-    { key: '0', title: 'Calendar', component: 'calendar' },
-    { key: '1', title: 'All Events', component: 'events' },
-  ], []);
+  // ✅ Handle dimension changes
+  useEffect(() => {
+    const subscription = Dimensions.addEventListener('change', ({ window }) => {
+      setScreenDimensions(window);
+    });
+    return () => subscription?.remove();
+  }, []);
 
-  // ✅ Memoize CalendarPage - THIS IS CRITICAL
+  // ✅ SIMPLIFIED: CalendarPage without problematic animations
   const CalendarPage = useMemo(() => (
-    <View style={{ flex: 1 }}>
-      <View style={{ flex: 1 }}>
+    <View style={styles.pageContainer}>
+      <View style={styles.calendarContainer}>
         <SingleDateCalendar 
+          ref={calendarRef}
           today={today}
           selectedDate={selectedDate}
           setSelectedDate={handleDateChange}
@@ -256,10 +416,8 @@ export default function CalendarScreen() {
         <Animated.View 
           style={[
             styles.eventsListContainer,
-            {
-              height: eventsListHeight, // ✅ SIMPLIFIED: Use eventsListHeight directly
-              overflow: 'hidden',
-              marginBottom: 0,
+            { 
+              height: eventsListHeight,
             }
           ]}
           {...panResponder.panHandlers}
@@ -268,39 +426,25 @@ export default function CalendarScreen() {
             <View style={styles.dragIndicator} />
           </View>
           
-          <View style={{ 
-            flex: 1, 
-            minHeight: 100, 
-            paddingBottom: 0
-          }}>
+          <View style={styles.eventsContent}>
             <EventsList date={selectedDate} />
           </View>
         </Animated.View>
       </View>
     </View>
-  ), [today, selectedDate, handleDateChange, eventsListHeight, panResponder.panHandlers]); // ✅ REMOVED: panY dependency
+  ), [selectedDate, handleDateChange, eventsListHeight, panResponder.panHandlers, today]);
 
-  // ✅ Memoize AllEventsScreen
   const AllEventsPage = useMemo(() => (
     <AllEventsScreen />
   ), []);
 
-  // ✅ Handle dimension changes efficiently
-  useEffect(() => {
-    const subscription = Dimensions.addEventListener('change', ({ window }) => {
-      setScreenDimensions(window);
-    });
-    
-    return () => subscription?.remove();
-  }, []);
-
-  // ✅ Loading state with memoized components
+  // ✅ Early return for loading
   if (isLoadingEvents) {
     return (
       <SafeAreaView style={styles.screen}>
         <CalendarHeader title="" rightActions={rightActions} />
         <View style={styles.loadingContainer}>
-          <Text>Loading events...</Text>
+          <Text style={styles.loadingText}>Loading events...</Text>
         </View>
       </SafeAreaView>
     );
@@ -308,34 +452,32 @@ export default function CalendarScreen() {
 
   return (
     <SafeAreaView style={styles.screen}>
-      <CalendarHeader
-        title=""
-        rightActions={rightActions}
-      />
+      <CalendarHeader title="" rightActions={rightActions} />
       
       <PagerView
         ref={pagerRef}
-        style={{ flex: 1 }}
-        initialPage={currentPage}
+        style={styles.pagerView}
+        initialPage={0}
         onPageSelected={handlePageChange}
         scrollEnabled={true}
         overdrag={false}
         pageMargin={-250}
         orientation="horizontal"
-        offscreenPageLimit={0}
+        offscreenPageLimit={1}
       >
-        <View key="0" style={{ flex: 1 }}>
+        <View key="0" style={styles.pageContainer}>
           {CalendarPage}
         </View>
-        <View key="1" style={{ flex: 1 }}>
+        <View key="1" style={styles.pageContainer}>
           {AllEventsPage}
         </View>
       </PagerView>
 
       <View style={styles.dotIndicatorContainer}>
-        <DotIndicator currentPage={currentPage} totalPages={pages.length} />
+        <DotIndicator currentPage={currentPage} totalPages={2} />
       </View>
 
+      {/* ✅ Options Modal */}
       <Modal
         visible={showOptionsDropdown}
         transparent={true}
@@ -354,18 +496,24 @@ export default function CalendarScreen() {
                 style={styles.dropdownItem}
                 onPress={item.onPress}
               >
-                <Ionicons name={item.icon as any} size={20} color={colors.text} />
+                <Ionicons name={item.icon} size={20} color={colors.text} />
                 <Text style={styles.dropdownText}>{item.title}</Text>
               </TouchableOpacity>
             ))}
           </View>
         </TouchableOpacity>
       </Modal>
+
+      {/* ✅ ADD: Search Modal */}
+      <EventSearch
+        visible={showSearchModal}
+        onClose={handleCloseSearch}
+      />
     </SafeAreaView>
   );
 }
 
-// ✅ Styles remain unchanged but moved to bottom
+// ✅ Optimized styles
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
@@ -375,6 +523,19 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 16,
+    color: colors.text,
+  },
+  pagerView: {
+    flex: 1,
+  },
+  pageContainer: {
+    flex: 1,
+  },
+  calendarContainer: {
+    flex: 1,
   },
   eventsGestureContainer: {
     position: 'absolute',
@@ -388,13 +549,11 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: -2,
-    },
+    shadowOffset: { width: 0, height: -2 },
     shadowOpacity: 0.1,
     shadowRadius: 3.84,
     elevation: 5,
+    overflow: 'hidden',
   },
   dragHandle: {
     alignItems: 'center',
@@ -405,6 +564,10 @@ const styles = StyleSheet.create({
     height: 4,
     backgroundColor: colors.grey,
     borderRadius: 2,
+  },
+  eventsContent: {
+    flex: 1,
+    minHeight: 100,
   },
   dotIndicatorContainer: {
     position: 'absolute',
@@ -428,10 +591,7 @@ const styles = StyleSheet.create({
     padding: 10,
     minWidth: 200,
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
     elevation: 5,
@@ -447,5 +607,29 @@ const styles = StyleSheet.create({
     marginLeft: 12,
     fontSize: 16,
     color: colors.text,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+  },
+  errorText: {
+    fontSize: 16,
+    color: colors.textMuted,
+    marginTop: 16,
+    marginBottom: 24,
+    textAlign: 'center',
+  },
+  retryButton: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  retryButtonText: {
+    color: colors.white,
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

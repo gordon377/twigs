@@ -2,16 +2,16 @@ import React, { useState, useRef } from 'react';
 import { 
   View, Text, TouchableOpacity, ScrollView, Alert, StyleSheet, 
   Platform, Modal, Share, Linking,
-  RefreshControl, // ✅ Add RefreshControl
-  ActivityIndicator // ✅ Add ActivityIndicator
+  RefreshControl,
+  ActivityIndicator
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { colors } from '@/styles/styles';
 import { CalendarHeader } from '@/components/Drawer';
-import { CalendarEvent } from '@/types/events';
+import { CalendarEvent, dateTimeHelpers } from '@/types/events';
 import { useEvents } from '@/hooks/useEvents';
-import { updateEvent as updateEventAPI, deleteEvent as deleteEventAPI, getEvents } from '@/utils/api'; // ✅ Add getEvents import
+import { updateEvent as updateEventAPI, deleteEvent as deleteEventAPI, getEvents } from '@/utils/api';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { EventForm } from '@/components/EventForm/EventForm';
 
@@ -31,49 +31,38 @@ export default function EventDetailsScreen() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
   const eventFormRef = useRef<any>(null);
-
-  // ✅ NEW: Add refresh state
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [refreshMessage, setRefreshMessage] = useState('');
 
-  // Find the event
   const event = events.find(e => e.id === eventId);
 
-  // ✅ UPDATED: Pull-to-refresh function - only sync dates of current event
   const handleRefresh = async () => {
-    if (isRefreshing || !event) return; // Prevent multiple simultaneous refreshes
+    if (isRefreshing || !event) return;
     
     setIsRefreshing(true);
     setRefreshMessage('Syncing events...');
 
     try {
-      // ✅ Use the actual event dates from local DB
-      const startDate = event.startDate; // Already in YYYY-MM-DD format
-      const endDate = event.endDate;     // Already in YYYY-MM-DD format
+      // ✅ FIXED: Extract dates from ISO format
+      const startDate = dateTimeHelpers.extractDateFromISO(event.startDate);
+      const endDate = dateTimeHelpers.extractDateFromISO(event.endDate);
 
       console.log('🔄 Refreshing events for date range:', startDate, 'to', endDate);
 
-      // Call the API to sync events for the specific date range
       const result = await getEvents(startDate, endDate);
 
       if (result.success) {
         setRefreshMessage('✅ Events synced successfully!');
-        setTimeout(() => {
-          setRefreshMessage('');
-        }, 1500);
+        setTimeout(() => setRefreshMessage(''), 1500);
       } else {
         setRefreshMessage('❌ Sync failed');
-        setTimeout(() => {
-          setRefreshMessage('');
-        }, 2000);
+        setTimeout(() => setRefreshMessage(''), 2000);
         console.error('Failed to sync events:', result.error);
       }
     } catch (error) {
       console.error('Error during refresh:', error);
       setRefreshMessage('❌ Network error');
-      setTimeout(() => {
-        setRefreshMessage('');
-      }, 2000);
+      setTimeout(() => setRefreshMessage(''), 2000);
     } finally {
       setIsRefreshing(false);
     }
@@ -100,41 +89,21 @@ export default function EventDetailsScreen() {
     );
   }
 
-  // Helper functions
+  // ✅ FIXED: Helper functions using ISO format
   const formatEventDate = () => {
     if (!event.startDate) return 'No date';
     
     try {
-      const [year, month, day] = event.startDate.split('-').map(Number);
-      const startDate = new Date(year, month - 1, day);
+      const startDateStr = dateTimeHelpers.extractDateFromISO(event.startDate);
+      const endDateStr = dateTimeHelpers.extractDateFromISO(event.endDate);
       
-      if (event.endDate && event.endDate !== event.startDate) {
-        const [endYear, endMonth, endDay] = event.endDate.split('-').map(Number);
-        const endDate = new Date(endYear, endMonth - 1, endDay);
-        
-        const startFormatted = startDate.toLocaleDateString('en-US', {
-          weekday: 'long',
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric'
-        });
-        
-        const endFormatted = endDate.toLocaleDateString('en-US', {
-          weekday: 'long',
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric'
-        });
-        
+      if (startDateStr !== endDateStr) {
+        const startFormatted = dateTimeHelpers.formatDateForDisplay(startDateStr);
+        const endFormatted = dateTimeHelpers.formatDateForDisplay(endDateStr);
         return `${startFormatted} - ${endFormatted}`;
       }
       
-      return startDate.toLocaleDateString('en-US', {
-        weekday: 'long',
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
-      });
+      return dateTimeHelpers.formatDateForDisplay(startDateStr);
     } catch (error) {
       console.error('Error formatting date:', error);
       return event.startDate;
@@ -142,32 +111,26 @@ export default function EventDetailsScreen() {
   };
 
   const formatEventTime = () => {
-    if (!event.startTime || !event.endTime) return 'All day';
+    // ✅ FIXED: Use ISO format and all-day detection
+    const isAllDay = dateTimeHelpers.isAllDayEvent(event.startDate, event.endDate);
+    
+    if (isAllDay) {
+      return 'All day';
+    }
     
     try {
-      const today = new Date();
-      const [startHour, startMinute] = event.startTime.split(':').map(Number);
-      const [endHour, endMinute] = event.endTime.split(':').map(Number);
-      
-      const startTime = new Date(today.getFullYear(), today.getMonth(), today.getDate(), startHour, startMinute);
-      const endTime = new Date(today.getFullYear(), today.getMonth(), today.getDate(), endHour, endMinute);
-      
-      const timeOptions: Intl.DateTimeFormatOptions = {
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true
-      };
-      
-      return `${startTime.toLocaleTimeString('en-US', timeOptions)} - ${endTime.toLocaleTimeString('en-US', timeOptions)}`;
+      const startTime = dateTimeHelpers.formatISOTimeForDisplay(event.startDate);
+      const endTime = dateTimeHelpers.formatISOTimeForDisplay(event.endDate);
+      return `${startTime} - ${endTime}`;
     } catch (error) {
       console.error('Error formatting time:', error);
-      return `${event.startTime} - ${event.endTime}`;
+      return 'Time not available';
     }
   };
 
-  const isMultiDay = event.startDate !== event.endDate;
+  const isMultiDay = dateTimeHelpers.extractDateFromISO(event.startDate) !== 
+                    dateTimeHelpers.extractDateFromISO(event.endDate);
 
-  // Action handlers
   const handleEdit = () => {
     setShowEditModal(true);
   };
@@ -209,7 +172,7 @@ export default function EventDetailsScreen() {
 
   const handleShare = async () => {
     try {
-      const isAllDay = !event.startTime || !event.endTime;
+      const isAllDay = dateTimeHelpers.isAllDayEvent(event.startDate, event.endDate);
       const duration = isAllDay ? 'All day event' : formatEventTime();
       
       const shareContent = `🎉 You're invited to: ${event.title}
@@ -281,14 +244,13 @@ export default function EventDetailsScreen() {
                                getCalendarByName(apiResponseData.calendar)?.id ||
                                updatedEventData.calendarId;
 
+        // ✅ FIXED: Use ISO format from API response
         const updatedEventObject: CalendarEvent = {
           ...event,
           id: apiResponseData.id.toString(),
           title: apiResponseData.name,
-          startDate: apiResponseData.startDate,
-          endDate: apiResponseData.endDate,
-          startTime: apiResponseData.startTime,
-          endTime: apiResponseData.endTime,
+          startDate: apiResponseData.startDate, // ✅ Already ISO from API
+          endDate: apiResponseData.endDate,     // ✅ Already ISO from API
           description: apiResponseData.description,
           hexcode: apiResponseData.hexcode || colors.primary,
           timezone: apiResponseData.timeZone,
@@ -347,7 +309,6 @@ export default function EventDetailsScreen() {
         ]}
       />
 
-      {/* ✅ NEW: Refresh indicator at the top */}
       {(isRefreshing || refreshMessage) && (
         <View style={styles.refreshIndicator}>
           {isRefreshing ? (
@@ -366,7 +327,6 @@ export default function EventDetailsScreen() {
         </View>
       )}
 
-      {/* ✅ UPDATED: ScrollView with RefreshControl */}
       <ScrollView 
         style={styles.content} 
         showsVerticalScrollIndicator={false}
@@ -532,8 +492,6 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 16,
   },
-
-  // ✅ NEW: Refresh indicator styles
   refreshIndicator: {
     backgroundColor: colors.primaryLight,
     paddingVertical: 12,
@@ -555,8 +513,6 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontWeight: '600',
   },
-  
-  // Error state
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -580,8 +536,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-
-  // Header section
   headerSection: {
     paddingVertical: 24,
     borderBottomWidth: 1,
@@ -617,8 +571,6 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     marginLeft: 36,
   },
-
-  // Info cards
   infoCard: {
     backgroundColor: colors.cardBackground,
     borderRadius: 16,
@@ -657,8 +609,6 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontWeight: '500',
   },
-
-  // Multi-day badge
   multiDayBadge: {
     backgroundColor: colors.primaryLight,
     paddingHorizontal: 12,
@@ -674,8 +624,6 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-
-  // Location & Description
   locationText: {
     fontSize: 16,
     color: colors.text,
@@ -688,8 +636,6 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     fontWeight: '400',
   },
-
-  // Action buttons
   actionButtons: {
     gap: 12,
     paddingBottom: 32,
