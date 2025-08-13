@@ -216,118 +216,91 @@ const SingleDateCalendarInner = forwardRef<any, SingleDateCalendarProps>(
   ({ today, selectedDate, setSelectedDate }, ref) => {
     const calendarRef = useRef<any>(null);
     const [isTransitioning, setIsTransitioning] = useState(false);
-    const [calendarKey, setCalendarKey] = useState(0);
     
-    // ✅ Animated values for seamless transitions
     const transitionOpacity = useRef(new Animated.Value(1)).current;
     const transitionScale = useRef(new Animated.Value(1)).current;
 
-    // ✅ SEAMLESS: Completely hide the re-render with smooth opacity
     useImperativeHandle(ref, () => ({
       scrollToToday: () => {
-        console.log('📅 Seamlessly transitioning to today:', today);
+        console.log('📅 Efficient scroll to today:', today);
         
         return new Promise<void>((resolve) => {
+          // ✅ Try to use flash-calendar's native scrolling first
+          if (calendarRef.current?.scrollToDate) {
+            try {
+              calendarRef.current.scrollToDate(today);
+              // ✅ Update selected date through prop callback
+              setSelectedDate(today);
+              resolve();
+              return;
+            } catch (error) {
+              console.log('Native scroll failed, using smooth transition');
+            }
+          }
+          
+          // ✅ Fallback: smooth visual transition without full re-render
           setIsTransitioning(true);
           
-          // ✅ Phase 1: Smooth fade out (hide the current calendar)
-          Animated.parallel([
-            Animated.timing(transitionOpacity, {
-              toValue: 0,  // ✅ Completely invisible
-              duration: 250,  // ✅ Slightly longer for smoother feel
-              useNativeDriver: true,
-              easing: Easing.out(Easing.cubic),
-            }),
-            Animated.timing(transitionScale, {
-              toValue: 0.92,  // ✅ Subtle scale down
-              duration: 250,
-              useNativeDriver: true,
-              easing: Easing.out(Easing.cubic),
-            }),
-          ]).start(() => {
-            // ✅ Phase 2: Re-render happens while completely invisible
+          Animated.timing(transitionOpacity, {
+            toValue: 0.3, // ✅ Don't go fully invisible
+            duration: 150, // ✅ Shorter duration
+            useNativeDriver: true,
+            easing: Easing.out(Easing.quad),
+          }).start(() => {
+            // ✅ Update state during transition (no key change)
             setSelectedDate(today);
-            setCalendarKey(prev => prev + 1);
             
-            console.log('📅 Calendar re-rendered invisibly');
-            
-            // ✅ Small delay to ensure re-render completes
-            setTimeout(() => {
-              // ✅ Phase 3: Smooth fade back in (reveal new calendar)
-              Animated.parallel([
-                Animated.timing(transitionOpacity, {
-                  toValue: 1,  // ✅ Fully visible
-                  duration: 300,  // ✅ Slightly longer for elegant reveal
-                  useNativeDriver: true,
-                  easing: Easing.out(Easing.quad), // ✅ Different easing for reveal
-                }),
-                Animated.timing(transitionScale, {
-                  toValue: 1,
-                  duration: 300,
-                  useNativeDriver: true,
-                  easing: Easing.out(Easing.quad),
-                }),
-              ]).start(() => {
-                setIsTransitioning(false);
-                console.log('✅ Seamless transition completed');
-                resolve();
-              });
-            }, 50); // ✅ Small buffer for re-render
+            // ✅ Quick fade back in
+            Animated.timing(transitionOpacity, {
+              toValue: 1,
+              duration: 150,
+              useNativeDriver: true,
+              easing: Easing.out(Easing.quad),
+            }).start(() => {
+              setIsTransitioning(false);
+              resolve();
+            });
           });
         });
       },
 
       scrollToDate: (date: string) => {
         return new Promise<void>((resolve) => {
-          console.log('📅 Seamlessly transitioning to date:', date);
-          setIsTransitioning(true);
+          // ✅ Try native scroll first
+          if (calendarRef.current?.scrollToDate) {
+            try {
+              calendarRef.current.scrollToDate(date);
+              setSelectedDate(date);
+              resolve();
+              return;
+            } catch (error) {
+              console.log('Native scroll failed');
+            }
+          }
           
-          // Same seamless pattern for any date
-          Animated.timing(transitionOpacity, {
-            toValue: 0,
-            duration: 200,
-            useNativeDriver: true,
-            easing: Easing.out(Easing.cubic),
-          }).start(() => {
-            setSelectedDate(date);
-            setCalendarKey(prev => prev + 1);
-            
-            setTimeout(() => {
-              Animated.timing(transitionOpacity, {
-                toValue: 1,
-                duration: 250,
-                useNativeDriver: true,
-                easing: Easing.out(Easing.quad),
-              }).start(() => {
-                setIsTransitioning(false);
-                resolve();
-              });
-            }, 50);
-          });
+          // ✅ Fallback with minimal animation
+          setSelectedDate(date);
+          resolve();
         });
       }
     }));
 
-    // ✅ Calculate initial month for seamless re-renders
+    // ✅ STABLE: Remove key-based re-rendering
     const initialMonthId = useMemo(() => {
       return selectedDate || today;
-    }, [selectedDate, today, calendarKey]);
+    }, [selectedDate, today]); // ✅ Remove calendarKey dependency
 
-    // ✅ Memoize calendar theme
     const calendarTheme = useMemo(() => customThemeLight, []);
 
-    // ✅ Handle date selection
     const handleDateSelect = useCallback((date: string) => {
       console.log('📅 Date selected:', date);
       setSelectedDate(date);
     }, [setSelectedDate]);
 
-    // ✅ Memoize active date ranges
     const activeDateRanges = useMemo(() => [
       { startId: selectedDate, endId: selectedDate },
     ], [selectedDate]);
 
-    // ✅ Safe date formatter
     const getCalendarDayFormat = useCallback((date: Date, locale: string) => {
       try {
         if (date && typeof date.getDate === 'function') {
@@ -350,7 +323,8 @@ const SingleDateCalendarInner = forwardRef<any, SingleDateCalendarProps>(
         ]}
       >
         <Calendar.List
-          key={`calendar-${calendarKey}-${initialMonthId}`}
+          // ✅ STABLE KEY: Only changes when absolutely necessary
+          key={`calendar-stable-${initialMonthId.slice(0, 7)}`} // Only month-year
           ref={calendarRef}
           theme={calendarTheme}
           calendarInitialMonthId={initialMonthId}
