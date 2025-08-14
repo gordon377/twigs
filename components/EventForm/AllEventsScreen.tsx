@@ -10,23 +10,25 @@ interface AllEventsScreenProps {
   onEventPress?: (event: CalendarEvent) => void;
 }
 
-export const AllEventsScreen: React.FC<AllEventsScreenProps> = ({ onEventPress }) => {
-  const { events, isLoadingEvents } = useEvents();
+// ✅ FIX 1: Export as default function for lazy loading
+const AllEventsScreen: React.FC<AllEventsScreenProps> = ({ onEventPress }) => {
+  const { events, isLoadingEvents, formatTimeDisplay } = useEvents();
   const scrollViewRef = useRef<ScrollView>(null);
 
-  // ✅ Group events by date in pure chronological order
+  // ✅ FIX 2: Group events by date using ISO date extraction
   const groupedEvents = React.useMemo(() => {
     const groups: { [date: string]: CalendarEvent[] } = {};
     
     events.forEach(event => {
-      const date = event.startDate;
-      if (!groups[date]) {
-        groups[date] = [];
+      // ✅ FIXED: Extract date from ISO string instead of using non-existent startTime
+      const dateStr = dateTimeHelpers.extractDateFromISO(event.startDate);
+      if (!groups[dateStr]) {
+        groups[dateStr] = [];
       }
-      groups[date].push(event);
+      groups[dateStr].push(event);
     });
 
-    // ✅ Sort dates in chronological order only (no special today priority)
+    // ✅ Sort dates in chronological order
     const sortedDates = Object.keys(groups).sort((a, b) => {
       return new Date(a).getTime() - new Date(b).getTime();
     });
@@ -34,10 +36,8 @@ export const AllEventsScreen: React.FC<AllEventsScreenProps> = ({ onEventPress }
     return sortedDates.map(date => ({
       date,
       events: groups[date].sort((a, b) => {
-        if (!a.startTime && !b.startTime) return 0;
-        if (!a.startTime) return -1;
-        if (!b.startTime) return 1;
-        return a.startTime.localeCompare(b.startTime);
+        // ✅ FIXED: Sort by full ISO timestamp instead of time-only strings
+        return new Date(a.startDate).getTime() - new Date(b.startDate).getTime();
       })
     }));
   }, [events]);
@@ -46,7 +46,6 @@ export const AllEventsScreen: React.FC<AllEventsScreenProps> = ({ onEventPress }
   const findClosestDateIndex = React.useMemo(() => {
     if (groupedEvents.length === 0) return 0;
     
-    // ✅ FIXED: Use built-in timezone-aware helper
     const todayString = dateTimeHelpers.getTodayStringInTimezone();
     const today = new Date(todayString + 'T00:00:00');
     
@@ -55,7 +54,6 @@ export const AllEventsScreen: React.FC<AllEventsScreenProps> = ({ onEventPress }
     
     groupedEvents.forEach((group, index) => {
       const eventDate = new Date(group.date + 'T00:00:00');
-      
       const diff = Math.abs(eventDate.getTime() - today.getTime());
       
       if (diff < closestDiff) {
@@ -70,11 +68,8 @@ export const AllEventsScreen: React.FC<AllEventsScreenProps> = ({ onEventPress }
   // ✅ Auto-scroll to today's events when component loads
   useEffect(() => {
     if (groupedEvents.length > 0 && scrollViewRef.current) {
-      // Delay to ensure component is fully rendered
       const scrollTimer = setTimeout(() => {
         if (scrollViewRef.current) {
-          // Calculate approximate scroll position
-          // Each date group is roughly 100px + events (about 80px each)
           let scrollY = 0;
           
           for (let i = 0; i < findClosestDateIndex; i++) {
@@ -82,24 +77,21 @@ export const AllEventsScreen: React.FC<AllEventsScreenProps> = ({ onEventPress }
             scrollY += groupedEvents[i].events.length * 80; // Event items height
           }
           
-          // Scroll with some offset to show the date header nicely
           scrollViewRef.current.scrollTo({
             y: Math.max(0, scrollY - 50),
             animated: true,
           });
         }
-      }, 300); // Wait for component to render
+      }, 300);
       
       return () => clearTimeout(scrollTimer);
     }
   }, [groupedEvents, findClosestDateIndex]);
 
-  // ✅ FIXED: Use built-in timezone-aware date formatting
+  // ✅ Format date helper
   const formatDate = (dateString: string) => {
-    // ✅ Use built-in timezone-aware helper to get today's date
     const todayString = dateTimeHelpers.getTodayStringInTimezone();
     
-    // ✅ Calculate tomorrow and yesterday using timezone-aware today
     const todayDate = dateTimeHelpers.parseDate(todayString);
     const tomorrowDate = new Date(todayDate);
     tomorrowDate.setDate(tomorrowDate.getDate() + 1);
@@ -109,7 +101,6 @@ export const AllEventsScreen: React.FC<AllEventsScreenProps> = ({ onEventPress }
     yesterdayDate.setDate(yesterdayDate.getDate() - 1);
     const yesterdayString = dateTimeHelpers.formatDateForStorage(yesterdayDate);
 
-    // ✅ Compare date strings directly (no timezone conversion needed)
     if (dateString === todayString) {
       return 'Today';
     } else if (dateString === tomorrowString) {
@@ -117,7 +108,6 @@ export const AllEventsScreen: React.FC<AllEventsScreenProps> = ({ onEventPress }
     } else if (dateString === yesterdayString) {
       return 'Yesterday';
     } else {
-      // ✅ Use built-in helper for consistent date formatting
       return dateTimeHelpers.formatDateForDisplay(dateString);
     }
   };
@@ -130,7 +120,6 @@ export const AllEventsScreen: React.FC<AllEventsScreenProps> = ({ onEventPress }
     }
   };
 
-  // ✅ Handle create event press
   const handleCreateEvent = () => {
     router.push('/(tabs)/calendar/createEvent');
   };
@@ -166,23 +155,21 @@ export const AllEventsScreen: React.FC<AllEventsScreenProps> = ({ onEventPress }
 
   return (
     <ScrollView 
-      ref={scrollViewRef} // ✅ Add ref for auto-scrolling
+      ref={scrollViewRef}
       style={styles.container} 
       showsVerticalScrollIndicator={false}
-      contentContainerStyle={styles.scrollContent} // ✅ Add content container style
+      contentContainerStyle={styles.scrollContent}
     >
       {groupedEvents.map(({ date, events }, index) => (
         <View 
           key={date} 
           style={[
             styles.dateGroup,
-            // ✅ FIXED: Use proper timezone comparison
             date === dateTimeHelpers.getTodayStringInTimezone() && styles.todaySection
           ]}
         >
           <Text style={[
             styles.dateHeader,
-            // ✅ FIXED: Use proper timezone comparison
             date === dateTimeHelpers.getTodayStringInTimezone() && styles.todayHeader
           ]}>
             {formatDate(date)}
@@ -204,13 +191,10 @@ export const AllEventsScreen: React.FC<AllEventsScreenProps> = ({ onEventPress }
                   </Text>
                   
                   <View style={styles.eventMeta}>
-                    {event.startTime ? (
-                      <Text style={styles.eventTime}>
-                        {event.startTime.slice(0, 5)} - {event.endTime?.slice(0, 5)}
-                      </Text>
-                    ) : (
-                      <Text style={styles.eventTime}>All day</Text>
-                    )}
+                    {/* ✅ FIXED: Use formatTimeDisplay from useEvents hook */}
+                    <Text style={styles.eventTime}>
+                      {formatTimeDisplay(event)}
+                    </Text>
                     
                     {event.location && (
                       <View style={styles.locationContainer}>
@@ -230,7 +214,6 @@ export const AllEventsScreen: React.FC<AllEventsScreenProps> = ({ onEventPress }
         </View>
       ))}
       
-      {/* ✅ Bottom create event prompt */}
       <View style={styles.bottomPrompt}>
         <Text style={styles.endText}>That's all your events!</Text>
         
@@ -249,7 +232,13 @@ export const AllEventsScreen: React.FC<AllEventsScreenProps> = ({ onEventPress }
   );
 };
 
-// ✅ Styles remain exactly the same
+// ✅ FIX 1: Export as default for lazy loading
+export default AllEventsScreen;
+
+// ✅ Also export as named export for backward compatibility
+export { AllEventsScreen };
+
+// ✅ Styles remain the same
 const styles = StyleSheet.create({
   container: {
     flex: 1,
