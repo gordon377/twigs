@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback, lazy, Suspense } from 'react';
 import { 
   Dimensions, 
   StyleSheet, 
@@ -16,11 +16,11 @@ import { colors } from '@/styles/styles';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CalendarHeader } from '@/components/Drawer';
 import { EventsList, SingleDateCalendar } from '@/components/Calendar';
-import { AllEventsScreen } from '@/components/EventForm/AllEventsScreen';
 import { DotIndicator } from '@/components/DotIndicator';
 import { useEvents } from '@/hooks/useEvents';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
+import { AllEventsScreen } from '@/components/EventForm/AllEventsScreen';
 import EventSearch from '@/components/EventForm/EventSearch';
 
 // ✅ Constants
@@ -82,17 +82,27 @@ const createTodayValue = (): string => {
   }
 };
 
+// ✅ OPTIMIZATION 1: Consolidated UI State
+interface UIState {
+  showOptionsDropdown: boolean;
+  showSearchModal: boolean;
+  currentPage: number;
+  isNavigatingToToday: boolean;
+}
+
 export default function CalendarScreen() {
   // ✅ FIXED: Create today value inside the component
   const today = useMemo(() => createTodayValue(), []);
 
-  // ✅ State management
+  // ✅ OPTIMIZED: Consolidated state management
   const [selectedDate, setSelectedDate] = useState(today);
-  const [showOptionsDropdown, setShowOptionsDropdown] = useState(false);
-  const [showSearchModal, setShowSearchModal] = useState(false);
-  const [currentPage, setCurrentPage] = useState(0);
   const [screenDimensions, setScreenDimensions] = useState(getDimensions());
-  const [isNavigatingToToday, setIsNavigatingToToday] = useState(false);
+  const [uiState, setUIState] = useState<UIState>({
+    showOptionsDropdown: false,
+    showSearchModal: false,
+    currentPage: 0,
+    isNavigatingToToday: false,
+  });
   
   // ✅ Refs
   const pagerRef = useRef<PagerView>(null);
@@ -101,9 +111,18 @@ export default function CalendarScreen() {
   const isGesturingRef = useRef(false);
   const isInitializedRef = useRef(false);
   const calendarRef = useRef<any>(null);
+  const heightAnimationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ✅ Hooks
   const { hasEventsOnDate, isLoadingEvents, initializeCalendarsFromAPI } = useEvents();
+
+  // ✅ OPTIMIZED: Batch state updates
+  const updateUIState = useCallback((updates: Partial<UIState>) => {
+    setUIState(prev => ({ ...prev, ...updates }));
+  }, []);
+
+  // ✅ Destructure UI state for easier access
+  const { showOptionsDropdown, showSearchModal, currentPage, isNavigatingToToday } = uiState;
 
   // ✅ Initialize calendars
   useEffect(() => {
@@ -145,25 +164,34 @@ export default function CalendarScreen() {
     }
   }, [hasEvents, defaultHeight, minHeight, eventsListHeight]);
 
+  // ✅ Debounced height animation
+  const debouncedHeightAnimation = useCallback((targetHeight: number) => {
+    if (heightAnimationTimeoutRef.current) {
+      clearTimeout(heightAnimationTimeoutRef.current);
+    }
+    
+    heightAnimationTimeoutRef.current = setTimeout(() => {
+      if (Math.abs(currentHeightRef.current - targetHeight) > 5) {
+        currentHeightRef.current = targetHeight;
+        
+        Animated.spring(eventsListHeight, {
+          toValue: targetHeight,
+          useNativeDriver: false,
+          tension: 80,
+          friction: 10,
+          velocity: 0,
+        }).start();
+      }
+    }, 100); // Debounce rapid height changes
+  }, [eventsListHeight]);
+
   // ✅ Smart height animation
   useEffect(() => {
     if (!isInitializedRef.current || currentPage !== 0 || isGesturingRef.current) return;
     
     const targetHeight = hasEvents ? defaultHeight : minHeight;
-    
-    if (Math.abs(currentHeightRef.current - targetHeight) > 5) {
-      currentHeightRef.current = targetHeight;
-      
-      // ✅ Use spring animation for more natural feel
-      Animated.spring(eventsListHeight, {
-        toValue: targetHeight,
-        useNativeDriver: false,
-        tension: 80,   // Slightly less stiff than navigate
-        friction: 10,  // More damping for gentler auto-adjustments
-        velocity: 0,
-      }).start();
-    }
-  }, [hasEvents, defaultHeight, minHeight, currentPage]);
+    debouncedHeightAnimation(targetHeight);
+  }, [hasEvents, defaultHeight, minHeight, currentPage, debouncedHeightAnimation]);
 
   // ✅ Optimized callbacks
   const handleDateChange = useCallback((date: string) => {
@@ -171,119 +199,106 @@ export default function CalendarScreen() {
   }, []);
 
   const handlePageChange = useCallback((event: any) => {
-    setCurrentPage(event.nativeEvent.position);
-  }, []);
+    updateUIState({ currentPage: event.nativeEvent.position });
+  }, [updateUIState]);
 
   const navigateToToday = useCallback(async () => {
-    if (isNavigatingToToday) return;
+    if (isNavigatingToToday) return; // Only prevent multiple simultaneous navigations
     
-    console.log('🏠 Starting seamless navigation to today:', today);
+    console.log('🏠 Starting "Back to Today" - Always available');
     
-    setIsNavigatingToToday(true);
-    setShowOptionsDropdown(false);
+    // ✅ OPTIMIZED: Batch state updates
+    updateUIState({ 
+      isNavigatingToToday: true, 
+      showOptionsDropdown: false 
+    });
     
     try {
       // ✅ Step 1: Ensure we're on the calendar page
       if (currentPage !== 0) {
-        setCurrentPage(0);
+        updateUIState({ currentPage: 0 });
         pagerRef.current?.setPage(0);
-        // Wait for page transition to complete
         await new Promise(resolve => setTimeout(resolve, 150));
       }
 
-      // ✅ Step 2: Start calendar transition (will be invisible during re-render)
-      let calendarTransitionCompleted = false;
-      const calendarPromise = new Promise<void>(async (resolve) => {
-        try {
-          if (calendarRef.current?.scrollToToday) {
-            console.log('📅 Starting seamless calendar transition...');
-            await calendarRef.current.scrollToToday();
-            calendarTransitionCompleted = true;
-            console.log('✅ Seamless calendar transition completed');
-          } else {
-            console.log('⚠️ scrollToToday method not available');
-            setSelectedDate(today);
-            calendarTransitionCompleted = true;
-          }
-          resolve();
-        } catch (error) {
-          console.error('❌ Error during calendar transition:', error);
-          setSelectedDate(today);
-          calendarTransitionCompleted = true;
-          resolve();
-        }
-      });
+      // ✅ Step 2: Pre-calculate height for coordination
+      const hasEventsToday = hasEventsOnDate(today);
+      const targetHeight = hasEventsToday ? defaultHeight : minHeight;
+      console.log('📏 Coordinating height for today:', targetHeight);
 
-      // ✅ Step 3: Coordinate height animation with calendar transition
+      // ✅ Step 3: Start BOTH animations in perfect coordination
+      const calendarPromise = calendarRef.current?.scrollToToday() || Promise.resolve();
+      
       const heightPromise = new Promise<void>((resolve) => {
-        // Wait a bit for calendar transition to start
+        // ✅ Start height animation with same timing as calendar transition
+        eventsListHeight.stopAnimation();
+        currentHeightRef.current = targetHeight;
+        
+        // ✅ Delay height animation to match calendar fade-out
         setTimeout(() => {
-          try {
-            const hasEventsToday = hasEventsOnDate(today);
-            const targetHeight = hasEventsToday ? defaultHeight : minHeight;
-            
-            console.log('📏 Coordinating height animation:', targetHeight, 'hasEvents:', hasEventsToday);
-            
-            eventsListHeight.stopAnimation();
-            currentHeightRef.current = targetHeight;
-            
-            // ✅ Use spring animation that complements the calendar transition
-            Animated.spring(eventsListHeight, {
-              toValue: targetHeight,
-              useNativeDriver: false,
-              tension: 90,
-              friction: 9,
-              velocity: 0,
-            }).start(() => {
-              console.log('✅ Height animation completed');
-              resolve();
-            });
-            
-          } catch (error) {
-            console.error('❌ Error during height animation:', error);
+          Animated.spring(eventsListHeight, {
+            toValue: targetHeight,
+            useNativeDriver: false,
+            tension: 100, // Match calendar transition speed
+            friction: 10,
+            velocity: 0,
+          }).start(() => {
+            console.log('✅ Height animation completed');
             resolve();
-          }
-        }, 100); // Start slightly after calendar transition begins
+          });
+        }, 200); // Start during calendar fade-out
       });
 
       // ✅ Wait for both animations to complete
       await Promise.all([calendarPromise, heightPromise]);
       
-      console.log('✅ All seamless animations completed');
+      console.log('✅ Back to Today completed');
 
     } catch (error) {
-      console.error('❌ Error during seamless navigation:', error);
+      console.error('❌ Error during Back to Today:', error);
+      // ✅ Fallback: ensure state is consistent
+      setSelectedDate(today);
     } finally {
-      // ✅ Clear loading state after everything is complete
       setTimeout(() => {
-        setIsNavigatingToToday(false);
-      }, 100); // Brief delay to ensure everything settles
+        updateUIState({ isNavigatingToToday: false });
+      }, 100);
     }
-  }, [hasEventsOnDate, defaultHeight, minHeight, eventsListHeight, today, isNavigatingToToday, currentPage]);
+  }, [
+    today, 
+    hasEventsOnDate, 
+    defaultHeight, 
+    minHeight, 
+    eventsListHeight, 
+    isNavigatingToToday, 
+    currentPage,
+    updateUIState
+  ]);
 
   const navigateToCalendars = useCallback(() => {
-    setShowOptionsDropdown(false);
+    updateUIState({ showOptionsDropdown: false });
     router.push('/(tabs)/calendar/manageCalendars');
-  }, []);
+  }, [updateUIState]);
 
   const navigateToAllEvents = useCallback(() => {
-    setShowOptionsDropdown(false);
-    setCurrentPage(1);
+    updateUIState({ 
+      showOptionsDropdown: false, 
+      currentPage: 1 
+    });
     pagerRef.current?.setPage(1);
-  }, []);
+  }, [updateUIState]);
 
   const navigateToCreateEvent = useCallback(() => {
     router.push(`/(tabs)/calendar/createEvent?selectedDate=${selectedDate}`);
   }, [selectedDate]);
 
-  // ✅ NEW: Search function
+  // ✅ OPTIMIZED: Search functions with batched updates
   const handleSearch = useCallback(() => {
-    setShowSearchModal(true);
-  }, []);
+    updateUIState({ showSearchModal: true });
+  }, [updateUIState]);
 
   const handleCloseSearch = useCallback(() => {
-    setShowSearchModal(false);
-  }, []);
+    updateUIState({ showSearchModal: false });
+  }, [updateUIState]);
 
   // ✅ Optimized PanResponder
   const panResponder = useMemo(() => PanResponder.create({
@@ -349,7 +364,7 @@ export default function CalendarScreen() {
   const rightActions = useMemo(() => [
     {
       icon: <Ionicons name="options-outline" size={24} color="#070c1f" />,
-      onPress: () => setShowOptionsDropdown(true),
+      onPress: () => updateUIState({ showOptionsDropdown: true }),
     },
     {
       icon: <Ionicons name="search" size={24} color="#070c1f" />,
@@ -359,15 +374,17 @@ export default function CalendarScreen() {
       icon: <Ionicons name="add-sharp" size={24} color="#070c1f" />,
       onPress: navigateToCreateEvent,
     },
-  ], [navigateToCreateEvent, handleSearch]);
+  ], [navigateToCreateEvent, handleSearch, updateUIState]);
 
+  // ✅ Updated options menu - no longer shows different state when on today
   const optionsMenuItems = useMemo(() => [
     {
       id: '1',
-      title: isNavigatingToToday ? 'Navigating...' : 'Back to Today',
+      title: isNavigatingToToday ? 'Navigating to Today...' : 'Back to Today',
       icon: isNavigatingToToday ? 'hourglass-outline' as const : 'today-outline' as const,
       onPress: navigateToToday,
-      disabled: isNavigatingToToday,
+      disabled: isNavigatingToToday, // Only disable during navigation, not when on today
+      style: isNavigatingToToday ? { opacity: 0.6 } : {},
     },
     {
       id: '2',
@@ -386,11 +403,11 @@ export default function CalendarScreen() {
       title: 'Search Events',
       icon: 'search-outline' as const,
       onPress: () => {
-        setShowOptionsDropdown(false);
+        updateUIState({ showOptionsDropdown: false });
         handleSearch();
       },
     }
-  ], [navigateToToday, navigateToCalendars, navigateToAllEvents, handleSearch, isNavigatingToToday]);
+  ], [navigateToToday, navigateToCalendars, navigateToAllEvents, handleSearch, isNavigatingToToday, updateUIState]);
 
   // ✅ Handle dimension changes
   useEffect(() => {
@@ -435,7 +452,13 @@ export default function CalendarScreen() {
   ), [selectedDate, handleDateChange, eventsListHeight, panResponder.panHandlers, today]);
 
   const AllEventsPage = useMemo(() => (
-    <AllEventsScreen />
+    <Suspense fallback={
+      <View style={styles.loadingContainer}>
+        <Text style={styles.loadingText}>Loading events...</Text>
+      </View>
+    }>
+      <AllEventsScreen />
+    </Suspense>
   ), []);
 
   // ✅ Early return for loading
@@ -477,27 +500,41 @@ export default function CalendarScreen() {
         <DotIndicator currentPage={currentPage} totalPages={2} />
       </View>
 
-      {/* ✅ Options Modal */}
+      {/* ✅ Enhanced Options Modal */}
       <Modal
         visible={showOptionsDropdown}
         transparent={true}
         animationType="fade"
-        onRequestClose={() => setShowOptionsDropdown(false)}
+        onRequestClose={() => updateUIState({ showOptionsDropdown: false })}
       >
         <TouchableOpacity 
           style={styles.modalOverlay}
           activeOpacity={1}
-          onPress={() => setShowOptionsDropdown(false)}
+          onPress={() => updateUIState({ showOptionsDropdown: false })}
         >
           <View style={styles.dropdownContainer}>
             {optionsMenuItems.map((item) => (
               <TouchableOpacity
                 key={item.id}
-                style={styles.dropdownItem}
-                onPress={item.onPress}
+                style={[
+                  styles.dropdownItem,
+                  item.disabled && styles.dropdownItemDisabled,
+                  item.style
+                ]}
+                onPress={item.disabled ? undefined : item.onPress}
+                disabled={item.disabled}
               >
-                <Ionicons name={item.icon} size={20} color={colors.text} />
-                <Text style={styles.dropdownText}>{item.title}</Text>
+                <Ionicons 
+                  name={item.icon} 
+                  size={20} 
+                  color={item.disabled ? colors.textMuted : colors.text} 
+                />
+                <Text style={[
+                  styles.dropdownText,
+                  item.disabled && styles.dropdownTextDisabled
+                ]}>
+                  {item.title}
+                </Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -505,10 +542,14 @@ export default function CalendarScreen() {
       </Modal>
 
       {/* ✅ ADD: Search Modal */}
-      <EventSearch
-        visible={showSearchModal}
-        onClose={handleCloseSearch}
-      />
+      {showSearchModal && (
+        <Suspense fallback={null}>
+          <EventSearch
+            visible={showSearchModal}
+            onClose={handleCloseSearch}
+          />
+        </Suspense>
+      )}
     </SafeAreaView>
   );
 }
@@ -603,10 +644,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     borderRadius: 8,
   },
+  dropdownItemDisabled: {
+    opacity: 0.6,
+  },
   dropdownText: {
     marginLeft: 12,
     fontSize: 16,
     color: colors.text,
+  },
+  dropdownTextDisabled: {
+    color: colors.textMuted,
   },
   errorContainer: {
     flex: 1,

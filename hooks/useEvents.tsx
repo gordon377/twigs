@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useCallback } from 'react';
 import { CalendarEvent, dateTimeHelpers } from '@/types/events';
 import { useEventsContext } from '@/contexts/EventsContext';
 import { colors } from '@/styles/styles'; // ✅ FIXED: Import colors
@@ -24,7 +24,7 @@ export const useEvents = () => {
     initializeCalendarsFromAPI,
   } = useEventsContext();
 
-  // ✅ UPDATED: Events lookup using ISO dates
+  // ✅ FIXED: Properly memoize events lookup with stable reference
   const eventsLookup = useMemo(() => {
     const lookup: Record<string, CalendarEvent[]> = {};
     
@@ -48,18 +48,20 @@ export const useEvents = () => {
     });
     
     return lookup;
-  }, [events]);
+  }, [events]); // ✅ CRITICAL: Only depend on events array
 
-  const getEventsForDate = (date: string): CalendarEvent[] => {
+  // ✅ FIXED: Memoize getEventsForDate function
+  const getEventsForDate = useCallback((date: string): CalendarEvent[] => {
     return eventsLookup[date] || [];
-  };
+  }, [eventsLookup]);
 
-  const hasEventsOnDate = (date: string): boolean => {
+  // ✅ FIXED: Memoize hasEventsOnDate function
+  const hasEventsOnDate = useCallback((date: string): boolean => {
     return !!eventsLookup[date]?.length;
-  };
+  }, [eventsLookup]);
 
-  // ✅ UPDATED: Format time using ISO dates
-  const formatTimeDisplay = (event: CalendarEvent, showTimezone: boolean = false): string => {
+  // ✅ STABLE: Memoize other utility functions
+  const formatTimeDisplay = useCallback((event: CalendarEvent, showTimezone: boolean = false): string => {
     const isAllDay = dateTimeHelpers.isAllDayEvent(event.startDate, event.endDate);
     const isMultiDay = dateTimeHelpers.extractDateFromISO(event.startDate) !== 
                        dateTimeHelpers.extractDateFromISO(event.endDate);
@@ -79,9 +81,9 @@ export const useEvents = () => {
     }
     
     return timeStr;
-  };
+  }, []);
 
-  const formatDateRange = (event: CalendarEvent, showTimezone: boolean = false): string => {
+  const formatDateRange = useCallback((event: CalendarEvent, showTimezone: boolean = false): string => {
     const startDateStr = dateTimeHelpers.extractDateFromISO(event.startDate);
     const endDateStr = dateTimeHelpers.extractDateFromISO(event.endDate);
     
@@ -111,13 +113,14 @@ export const useEvents = () => {
     const endStr = endDate.toLocaleDateString('en-US', formatOptions);
     
     return `${startStr} - ${endStr}`;
-  };
+  }, []);
 
-  const isMultiDayEvent = (event: CalendarEvent): boolean => {
+  const isMultiDayEvent = useCallback((event: CalendarEvent): boolean => {
     return dateTimeHelpers.extractDateFromISO(event.startDate) !== 
            dateTimeHelpers.extractDateFromISO(event.endDate);
-  };
+  }, []);
 
+  // ✅ STABLE: Memoize derived data
   const datesWithEvents = useMemo(() => {
     return Object.keys(eventsLookup);
   }, [eventsLookup]);

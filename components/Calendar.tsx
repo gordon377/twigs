@@ -5,6 +5,7 @@ import { colors } from '@/styles/styles';
 import { Calendar, CalendarTheme, toDateId } from '@marceloterreiro/flash-calendar';
 import { useEvents } from '@/hooks/useEvents';
 import { CalendarEvent, dateTimeHelpers } from '@/types/events';
+import { Ionicons } from '@expo/vector-icons';
 
 const router = useRouter();
 
@@ -105,7 +106,7 @@ const EventItem = memo<{
   );
 });
 
-// ✅ Enhanced EventsList with better performance
+// ✅ Enhanced EventsList with FlatList performance optimizations
 export const EventsList = memo<{ date: string }>(({ date }) => {
   const { 
     getEventsForDate, 
@@ -143,6 +144,13 @@ export const EventsList = memo<{ date: string }>(({ date }) => {
 
   // ✅ Memoize key extractor
   const keyExtractor = useCallback((item: CalendarEvent) => item.id, []);
+
+  // ✅ ADD: Performance optimizations for FlatList
+  const getItemLayout = useCallback((data: any, index: number) => ({
+    length: 80, // Approximate item height
+    offset: 80 * index,
+    index,
+  }), []);
 
   // ✅ Memoize empty state component
   const EmptyState = useMemo(() => (
@@ -182,19 +190,24 @@ export const EventsList = memo<{ date: string }>(({ date }) => {
           data={events}
           keyExtractor={keyExtractor}
           renderItem={renderEventItem}
-          showsVerticalScrollIndicator={true}
+          // ✅ PERFORMANCE OPTIMIZATIONS
+          getItemLayout={getItemLayout}
+          removeClippedSubviews={true}
+          maxToRenderPerBatch={5}
+          windowSize={5}
+          initialNumToRender={5}
+          updateCellsBatchingPeriod={50}
+          // ✅ Reduce re-renders
+          extraData={date}
+          // ✅ Memory optimization
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
           style={{ flex: 1 }}
           contentContainerStyle={{ 
             paddingHorizontal: 16,
             paddingVertical: 8,
             flexGrow: 1,
           }}
-          // ✅ Performance optimizations
-          removeClippedSubviews={true}
-          maxToRenderPerBatch={10}
-          windowSize={10}
-          initialNumToRender={10}
-          getItemLayout={undefined} // Let FlatList calculate
         />
       )}
     </View>
@@ -211,91 +224,145 @@ type SingleDateCalendarProps = {
   setSelectedDate: (date: string) => void;
 };
 
-// ✅ ULTRA-SIMPLE: Minimal implementation that avoids Date issues
+// ✅ OPTIMIZED: Smart calendar component with controlled re-rendering for Back to Today
 const SingleDateCalendarInner = forwardRef<any, SingleDateCalendarProps>(
   ({ today, selectedDate, setSelectedDate }, ref) => {
     const calendarRef = useRef<any>(null);
+    const [forceRenderKey, setForceRenderKey] = useState(0); // ✅ Force re-render key
     const [isTransitioning, setIsTransitioning] = useState(false);
     
+    // ✅ Animation values for smooth transitions
     const transitionOpacity = useRef(new Animated.Value(1)).current;
     const transitionScale = useRef(new Animated.Value(1)).current;
+    const backdropOpacity = useRef(new Animated.Value(0)).current;
 
     useImperativeHandle(ref, () => ({
       scrollToToday: () => {
-        console.log('📅 Efficient scroll to today:', today);
+        console.log('📅 Back to Today - Always execute smooth transition');
         
         return new Promise<void>((resolve) => {
-          // ✅ Try to use flash-calendar's native scrolling first
-          if (calendarRef.current?.scrollToDate) {
-            try {
-              calendarRef.current.scrollToDate(today);
-              // ✅ Update selected date through prop callback
-              setSelectedDate(today);
-              resolve();
-              return;
-            } catch (error) {
-              console.log('Native scroll failed, using smooth transition');
-            }
-          }
+          // ✅ REMOVED: Skip check - always allow Back to Today functionality
+          // This ensures the user can always trigger the smooth animation and visual feedback
           
-          // ✅ Fallback: smooth visual transition without full re-render
           setIsTransitioning(true);
           
-          Animated.timing(transitionOpacity, {
-            toValue: 0.3, // ✅ Don't go fully invisible
-            duration: 150, // ✅ Shorter duration
-            useNativeDriver: true,
-            easing: Easing.out(Easing.quad),
-          }).start(() => {
-            // ✅ Update state during transition (no key change)
-            setSelectedDate(today);
-            
-            // ✅ Quick fade back in
+          // ✅ Step 1: Smooth fade out with backdrop
+          Animated.parallel([
             Animated.timing(transitionOpacity, {
-              toValue: 1,
-              duration: 150,
+              toValue: 0.4,
+              duration: 200,
               useNativeDriver: true,
               easing: Easing.out(Easing.quad),
-            }).start(() => {
-              setIsTransitioning(false);
-              resolve();
-            });
+            }),
+            Animated.timing(transitionScale, {
+              toValue: 0.96,
+              duration: 200,
+              useNativeDriver: true,
+              easing: Easing.out(Easing.quad),
+            }),
+            Animated.timing(backdropOpacity, {
+              toValue: 0.3,
+              duration: 200,
+              useNativeDriver: true,
+              easing: Easing.out(Easing.quad),
+            })
+          ]).start(() => {
+            // ✅ Step 2: Always force re-render during transition (regardless of current date)
+            setSelectedDate(today);
+            setForceRenderKey(prev => prev + 1); // Force calendar recreation to ensure today is visible
+            
+            // ✅ Step 3: Brief pause to allow re-render
+            setTimeout(() => {
+              // ✅ Step 4: Smooth fade back in
+              Animated.parallel([
+                Animated.timing(transitionOpacity, {
+                  toValue: 1,
+                  duration: 300,
+                  useNativeDriver: true,
+                  easing: Easing.out(Easing.cubic),
+                }),
+                Animated.timing(transitionScale, {
+                  toValue: 1,
+                  duration: 300,
+                  useNativeDriver: true,
+                  easing: Easing.out(Easing.cubic),
+                }),
+                Animated.timing(backdropOpacity, {
+                  toValue: 0,
+                  duration: 300,
+                  useNativeDriver: true,
+                  easing: Easing.out(Easing.cubic),
+                })
+              ]).start(() => {
+                setIsTransitioning(false);
+                console.log('✅ Back to Today transition completed');
+                resolve();
+              });
+            }, 80); // Optimal pause for re-render
           });
         });
       },
 
       scrollToDate: (date: string) => {
         return new Promise<void>((resolve) => {
-          // ✅ Try native scroll first
-          if (calendarRef.current?.scrollToDate) {
-            try {
-              calendarRef.current.scrollToDate(date);
-              setSelectedDate(date);
-              resolve();
-              return;
-            } catch (error) {
-              console.log('Native scroll failed');
-            }
-          }
+          // ✅ NORMAL NAVIGATION: No forced re-render, just update state
+          console.log('📅 Normal date navigation (smooth)');
           
-          // ✅ Fallback with minimal animation
-          setSelectedDate(date);
-          resolve();
+          if (selectedDate === date) {
+            resolve();
+            return;
+          }
+
+          // ✅ For close dates, use smooth transition without re-render
+          const daysDiff = Math.abs(
+            new Date(date).getTime() - new Date(selectedDate).getTime()
+          ) / (1000 * 60 * 60 * 24);
+
+          if (daysDiff <= 7) {
+            // Within a week - smooth state update
+            setSelectedDate(date);
+            resolve();
+          } else {
+            // Far jump - use light transition
+            setIsTransitioning(true);
+            
+            Animated.timing(transitionOpacity, {
+              toValue: 0.7,
+              duration: 150,
+              useNativeDriver: true,
+            }).start(() => {
+              setSelectedDate(date);
+              
+              setTimeout(() => {
+                Animated.timing(transitionOpacity, {
+                  toValue: 1,
+                  duration: 150,
+                  useNativeDriver: true,
+                }).start(() => {
+                  setIsTransitioning(false);
+                  resolve();
+                });
+              }, 50);
+            });
+          }
         });
       }
     }));
 
-    // ✅ STABLE: Remove key-based re-rendering
+    // ✅ SMART KEY: Changes when forceRenderKey changes (Back to Today)
     const initialMonthId = useMemo(() => {
       return selectedDate || today;
-    }, [selectedDate, today]); // ✅ Remove calendarKey dependency
+    }, [selectedDate, today, forceRenderKey]); // ✅ forceRenderKey triggers recalculation
 
     const calendarTheme = useMemo(() => customThemeLight, []);
 
+    // ✅ OPTIMIZED: Only update if date actually changed
     const handleDateSelect = useCallback((date: string) => {
-      console.log('📅 Date selected:', date);
-      setSelectedDate(date);
-    }, [setSelectedDate]);
+      console.log('📅 Date selected by user:', date);
+      if (date !== selectedDate) {
+        setSelectedDate(date);
+      }
+    }, [selectedDate, setSelectedDate]);
 
     const activeDateRanges = useMemo(() => [
       { startId: selectedDate, endId: selectedDate },
@@ -313,44 +380,94 @@ const SingleDateCalendarInner = forwardRef<any, SingleDateCalendarProps>(
     }, []);
 
     return (
-      <Animated.View 
-        style={[
-          styles.cal, 
-          { 
-            opacity: transitionOpacity,
-            transform: [{ scale: transitionScale }]
-          }
-        ]}
-      >
-        <Calendar.List
-          // ✅ STABLE KEY: Only changes when absolutely necessary
-          key={`calendar-stable-${initialMonthId.slice(0, 7)}`} // Only month-year
-          ref={calendarRef}
-          theme={calendarTheme}
-          calendarInitialMonthId={initialMonthId}
-          horizontal={false}
-          calendarActiveDateRanges={activeDateRanges}
-          onCalendarDayPress={handleDateSelect}
-          calendarFormatLocale="en"
-          getCalendarDayFormat={getCalendarDayFormat}
+      <View style={styles.cal}>
+        {/* ✅ Backdrop for smooth transition */}
+        <Animated.View 
+          style={[
+            StyleSheet.absoluteFillObject,
+            {
+              backgroundColor: colors.background,
+              opacity: backdropOpacity,
+              zIndex: 1,
+            }
+          ]}
+          pointerEvents={isTransitioning ? 'auto' : 'none'}
         />
-      </Animated.View>
+        
+        {/* ✅ Calendar with transition animations */}
+        <Animated.View 
+          style={[
+            StyleSheet.absoluteFillObject,
+            { 
+              opacity: transitionOpacity,
+              transform: [{ scale: transitionScale }],
+              zIndex: 0,
+            }
+          ]}
+        >
+          <Calendar.List
+            // ✅ CRITICAL: Key changes when forceRenderKey changes (Back to Today)
+            key={`calendar-optimized-${forceRenderKey}-${initialMonthId.slice(0, 7)}`}
+            ref={calendarRef}
+            theme={calendarTheme}
+            calendarInitialMonthId={initialMonthId} // ✅ This resets calendar position
+            horizontal={false}
+            calendarActiveDateRanges={activeDateRanges}
+            onCalendarDayPress={handleDateSelect}
+            calendarFormatLocale="en"
+            getCalendarDayFormat={getCalendarDayFormat}
+          />
+        </Animated.View>
+        
+        {/* ✅ Transition indicator */}
+        {isTransitioning && (
+          <Animated.View 
+            style={[
+              StyleSheet.absoluteFillObject,
+              {
+                justifyContent: 'center',
+                alignItems: 'center',
+                backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                opacity: backdropOpacity,
+                zIndex: 2,
+              }
+            ]}
+            pointerEvents="none"
+          >
+            <View style={{
+              width: 48,
+              height: 48,
+              borderRadius: 24,
+              backgroundColor: colors.primary,
+              justifyContent: 'center',
+              alignItems: 'center',
+              shadowColor: colors.black,
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.3,
+              shadowRadius: 8,
+              elevation: 8,
+            }}>
+              <Ionicons name="today" size={24} color={colors.white} />
+            </View>
+          </Animated.View>
+        )}
+      </View>
     );
   }
 );
 
+// ✅ PRECISE MEMO: Only re-render when props actually change
 export const SingleDateCalendar = React.memo(
   SingleDateCalendarInner,
-  (
-    prevProps: SingleDateCalendarProps,
-    nextProps: SingleDateCalendarProps
-  ) => {
-    // ✅ Custom comparison function
-    return (
-      prevProps.today === nextProps.today &&
-      prevProps.selectedDate === nextProps.selectedDate &&
-      prevProps.setSelectedDate === nextProps.setSelectedDate
+  (prevProps, nextProps) => {
+    // ✅ Only re-render if props actually changed
+    const propsChanged = (
+      prevProps.today !== nextProps.today ||
+      prevProps.selectedDate !== nextProps.selectedDate ||
+      prevProps.setSelectedDate !== nextProps.setSelectedDate
     );
+    
+    return !propsChanged; // Return true to SKIP re-render
   }
 );
 
