@@ -22,7 +22,13 @@ function RootLayoutContent() {
     <Stack.Screen key="signUpPassword" name="signUpPassword" />,
     <Stack.Screen key="signUpUser" name="signUpUser" />,
   ] : [
-    <Stack.Screen key="tabs" name="(tabs)" />,
+    <Stack.Screen 
+      key="tabs" 
+      name="(tabs)"
+      options={{
+        gestureEnabled: false,
+      }}
+       />,
   ];
 
   return (
