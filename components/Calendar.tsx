@@ -171,7 +171,7 @@ export const SingleDateCalendar: React.FC<SingleDateCalendarProps> = ({
   const pagerRef = useRef<PagerView>(null);
   const isUpdatingRef = useRef(false);
   const lastPagePositionRef = useRef(1);
-
+  
   const getMonthIndex = (dateStr: string) => {
     const [year, month] = dateStr.split('-').map(Number);
     return (year - 2000) * 12 + (month - 1);
@@ -230,55 +230,67 @@ export const SingleDateCalendar: React.FC<SingleDateCalendarProps> = ({
     [setSelectedDate, onDoubleTapDay]
   );
 
+  const PAGE_RANGE = 1; // ___ months before and after
+  const TOTAL_PAGES = PAGE_RANGE * 2 + 1; 
+  //Generating Months based on range above (finite scroll)
   const monthPages = useMemo(() => {
-    return [
-      <View key="prev" style={styles.calendarPage}>
-        <Calendar
-          current={getMonthString(currentMonthIndex - 1) + '-01'}
-          onDayPress={onDayPress}
-          markedDates={marks}
-          hideArrows={true}
-          hideExtraDays={false}
-          disableMonthChange={true}
-          theme={calendarTheme}
-          style={styles.calendar}
-        />
-      </View>,
-      <View key="current" style={styles.calendarPage}>
-        <Calendar
-          current={getMonthString(currentMonthIndex) + '-01'}
-          onDayPress={onDayPress}
-          markedDates={marks}
-          hideArrows={true}
-          hideExtraDays={false}
-          disableMonthChange={true}
-          theme={calendarTheme}
-          style={styles.calendar}
-        />
-      </View>,
-      <View key="next" style={styles.calendarPage}>
-        <Calendar
-          current={getMonthString(currentMonthIndex + 1) + '-01'}
-          onDayPress={onDayPress}
-          markedDates={marks}
-          hideArrows={true}
-          hideExtraDays={false}
-          disableMonthChange={true}
-          theme={calendarTheme}
-          style={styles.calendar}
-        />
-      </View>
-    ];
+    const pages = [];
+    for (let i = -PAGE_RANGE; i <= PAGE_RANGE; i++) {
+      const monthIndex = currentMonthIndex + i;
+      pages.push(
+        <View key={monthIndex} style={styles.calendarPage}>
+          <Calendar
+            current={getMonthString(monthIndex) + '-01'}
+            onDayPress={onDayPress}
+            markedDates={marks}
+            hideArrows={true}
+            hideExtraDays={false}
+            disableMonthChange={true}
+            theme={calendarTheme}
+            style={styles.calendar}
+          />
+        </View>
+      );
+    }
+    return pages;
   }, [currentMonthIndex, marks, onDayPress]);
+
+  //Selected Date & Month Index Sync
+  useEffect(() => {
+    const newIndex = getMonthIndex(selectedDate);
+    if (newIndex !== currentMonthIndex) {
+      setCurrentMonthIndex(newIndex);
+      pagerRef.current?.setPageWithoutAnimation(PAGE_RANGE);
+    }
+  }, [selectedDate]);
+
+  //For the latest currentMonthIndex value at relevant rerenders
+  const currentMonthIndexRef = useRef(currentMonthIndex);
+  useEffect(()=> {
+    currentMonthIndexRef.current = currentMonthIndex;  
+  }, [currentMonthIndex]);
 
   const handlePageSelected = useCallback(
     (e: { nativeEvent: { position: number } }) => {
-      const newIndex = currentMonthIndex - 1 + e.nativeEvent.position;
-      if (newIndex !== currentMonthIndex) {
-        setCurrentMonthIndex(newIndex);
+      if (isUpdatingRef.current) {
+        isUpdatingRef.current = false;
+        return; // Ignore the event triggered by setPageWithoutAnimation
+      }
+      const pageOffset = e.nativeEvent.position - PAGE_RANGE;
+      if (pageOffset !== 0) {
+        const newMonthIndex = currentMonthIndexRef.current + pageOffset;
+        setCurrentMonthIndex(newMonthIndex);
+
+        const newMonthStr = getMonthString(newMonthIndex);
+        if (!selectedDate.startsWith(newMonthStr)) {
+          setSelectedDate(`${newMonthStr}-01`);
+        }
+
+        isUpdatingRef.current = true;
+        pagerRef.current?.setPageWithoutAnimation(PAGE_RANGE);
       }
     },
-    [currentMonthIndex]
+    []
   );
 
   useEffect(() => {
@@ -286,13 +298,14 @@ export const SingleDateCalendar: React.FC<SingleDateCalendarProps> = ({
   }, []);
 
   return (
-    <View style={styles.calendarContainer}>
+    <View style={{ height: SCREEN_HEIGHT * 0.45, flex: 1 }}>
       <PagerView
         ref={pagerRef}
         style={styles.pagerView}
         orientation="vertical"
-        initialPage={1}
+        initialPage={PAGE_RANGE}
         onPageSelected={handlePageSelected}
+        overdrag={false}
       >
         {monthPages}
       </PagerView>
