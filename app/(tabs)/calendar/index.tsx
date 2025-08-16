@@ -13,6 +13,8 @@ import {
   PanResponder,
   type GestureResponderEvent,
   type PanResponderGestureState,
+  Modal,
+  TouchableOpacity,
 } from 'react-native';
 import PagerView from 'react-native-pager-view';
 import { colors } from '@/styles/styles';
@@ -65,6 +67,75 @@ const LazyLoadingIndicator = () => (
     <Text style={styles.loadingText}>Loading...</Text>
   </View>
 );
+
+// Options Dropdown Component
+const OptionsDropdown = ({ 
+  visible, 
+  onClose, 
+  menuItems 
+}: { 
+  visible: boolean; 
+  onClose: () => void; 
+  menuItems: Array<{
+    id: string;
+    title: string;
+    icon: string;
+    onPress: () => void;
+    disabled?: boolean;
+    style?: any;
+  }>;
+}) => {
+  if (!visible) return null;
+
+  return (
+    <Modal
+      transparent
+      visible={visible}
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <TouchableOpacity
+        style={styles.modalOverlay}
+        activeOpacity={1}
+        onPress={onClose}
+      >
+        <View style={styles.dropdownContainer}>
+          <View style={styles.dropdownMenu}>
+            {menuItems.map((item, index) => (
+              <TouchableOpacity
+                key={item.id}
+                style={[
+                  styles.dropdownItem,
+                  index === menuItems.length - 1 && styles.dropdownItemLast,
+                  item.style
+                ]}
+                onPress={() => {
+                  if (!item.disabled) {
+                    item.onPress();
+                  }
+                }}
+                disabled={item.disabled}
+              >
+                <Ionicons 
+                  name={item.icon as any} 
+                  size={20} 
+                  color={item.disabled ? colors.textMuted : colors.text} 
+                  style={styles.dropdownIcon}
+                />
+                <Text style={[
+                  styles.dropdownText,
+                  item.disabled && { color: colors.textMuted }
+                ]}>
+                  {item.title}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      </TouchableOpacity>
+    </Modal>
+  );
+};
 
 export default function CalendarScreen() {
   const today = useMemo(() => createTodayValue(), []);
@@ -163,9 +234,9 @@ export default function CalendarScreen() {
   const responsiveHeights = useMemo(() => {
     const { height } = screenDimensions;
     return {
-      minHeight: height * 0.08,
+      minHeight: height * 0.30,
       maxHeight: height * 0.75,
-      defaultHeight: height * 0.25,
+      defaultHeight: height * 0.30,
     };
   }, [screenDimensions]);
 
@@ -388,7 +459,7 @@ export default function CalendarScreen() {
     return PanResponder.create({
       onStartShouldSetPanResponder: (evt: GestureResponderEvent) => {
         if (currentPage !== 0) return false;
-        return evt.nativeEvent.locationY < 50;
+        return true;
       },
 
       onMoveShouldSetPanResponder: (evt: GestureResponderEvent, gestureState: PanResponderGestureState) => {
@@ -420,19 +491,33 @@ export default function CalendarScreen() {
         const deltaY = gestureState.dy;
         const newHeight = currentHeightRef.current - deltaY;
         const clampedHeight = Math.max(minHeight, Math.min(maxHeight, newHeight));
-        if (Math.abs(clampedHeight - currentHeightRef.current + deltaY) > 1) {
-          eventsListHeight.setValue(clampedHeight - currentHeightRef.current);
+        
+        let resistance = 1;
+        if (clampedHeight <= minHeight + 50) {
+          resistance = 0.3;
+        } else if (clampedHeight >= maxHeight - 50) {
+          resistance = 0.3;
         }
+        
+        const finalHeight = currentHeightRef.current - (deltaY * resistance);
+        const finalClampedHeight = Math.max(minHeight, Math.min(maxHeight, finalHeight));
+        
+        if (Math.abs(finalClampedHeight - currentHeightRef.current + deltaY) > 1) {
+          eventsListHeight.setValue(finalClampedHeight - currentHeightRef.current);
+        }
+        
         const velocity = gestureState.vy;
         velocityTracker.current.push(velocity);
         if (velocityTracker.current.length > 6) {
           velocityTracker.current.shift();
         }
+        
         if (GESTURE_DEBUG) {
           console.log('👆 Move:', {
             deltaY: deltaY.toFixed(1),
-            newHeight: clampedHeight.toFixed(1),
-            velocity: velocity.toFixed(2)
+            newHeight: finalClampedHeight.toFixed(1),
+            velocity: velocity.toFixed(2),
+            resistance: resistance.toFixed(2)
           });
         }
       },
@@ -447,12 +532,14 @@ export default function CalendarScreen() {
             displacement: gestureState.dy.toFixed(1)
           });
         }
+        
         eventsListHeight.flattenOffset();
         const avgVelocity = velocityTracker.current.length > 0
           ? velocityTracker.current.reduce((sum, v) => sum + v, 0) / velocityTracker.current.length
           : gestureState.vy;
         const absVelocity = Math.abs(avgVelocity);
         const newHeight = currentHeightRef.current - gestureState.dy;
+        
         let finalHeight: number;
         if (absVelocity > VELOCITY_THRESHOLD) {
           finalHeight = avgVelocity > 0 ? minHeight : maxHeight;
@@ -465,8 +552,10 @@ export default function CalendarScreen() {
         } else {
           finalHeight = newHeight < midPoint ? minHeight : maxHeight;
         }
+        
         finalHeight = Math.max(minHeight, Math.min(maxHeight, finalHeight));
         currentHeightRef.current = finalHeight;
+        
         InteractionManager.runAfterInteractions(() => {
           const animationVelocity = Math.min(absVelocity, 3);
           if (absVelocity > VELOCITY_THRESHOLD) {
@@ -523,7 +612,6 @@ export default function CalendarScreen() {
     },
   ], [selectedDate]);
 
-  // Options menu items
   const optionsMenuItems = useMemo(() => [
     {
       id: '1',
@@ -556,7 +644,6 @@ export default function CalendarScreen() {
     }
   ], [navigateToToday, navigateToCalendars, navigateToAllEvents, handleSearch, isNavigatingToToday, updateUIState]);
 
-  // Handle dimension changes
   useEffect(() => {
     const subscription = Dimensions.addEventListener('change', ({ window }) => {
       setScreenDimensions(window);
@@ -564,26 +651,19 @@ export default function CalendarScreen() {
     return () => subscription?.remove();
   }, []);
 
-  // Enhanced memory cleanup
   useEffect(() => {
     return () => {
-      // Clean up timeouts
       if (heightAnimationTimeoutRef.current) {
         clearTimeout(heightAnimationTimeoutRef.current);
       }
-
-      // Stop animations and clear state
       eventsListHeight.stopAnimation();
       eventsListHeight.removeAllListeners();
-
-      // Clear gesture tracking
       velocityTracker.current = [];
       isGesturingRef.current = false;
       isAnimatingRef.current = false;
     };
   }, [eventsListHeight]);
 
-  // CalendarPage with double tap logic
   const CalendarPage = useMemo(() => (
     <View style={styles.pageContainer}>
       <View style={styles.calendarContainer}>
@@ -596,11 +676,13 @@ export default function CalendarScreen() {
         <Animated.View
           style={[
             styles.eventsListContainer,
-            { height: 200 }
+            { height: eventsListHeight }
           ]}
+          {...panResponder.panHandlers}
         >
           <View style={styles.dragHandle}>
             <View style={styles.dragIndicator} />
+            <View style={styles.dragHandleBackground} />
           </View>
           <View style={styles.eventsContent}>
             <EventsList date={selectedDate} />
@@ -608,7 +690,7 @@ export default function CalendarScreen() {
         </Animated.View>
       </View>
     </View>
-  ), [selectedDate, handleDatePress]);
+  ), [selectedDate, handleDatePress, eventsListHeight, panResponder.panHandlers]);
 
   const AllEventsPage = useMemo(() => (
     <Suspense fallback={<LazyLoadingIndicator />}>
@@ -620,7 +702,6 @@ export default function CalendarScreen() {
     </Suspense>
   ), [uiState.isAllEventsLoaded]);
 
-  // Early return for loading
   if (isLoadingEvents) {
     return (
       <SafeAreaView style={styles.screen}>
@@ -631,7 +712,7 @@ export default function CalendarScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.screen}>
+    <SafeAreaView style={styles.screen} edges={['top', 'right', 'left']}>
       <CalendarHeader title="" rightActions={rightActions} />
 
       <PagerView
@@ -657,7 +738,22 @@ export default function CalendarScreen() {
         <DotIndicator currentPage={currentPage} totalPages={2} />
       </View>
 
-      {/* Big Calendar View Overlay */}
+      <OptionsDropdown
+        visible={showOptionsDropdown}
+        onClose={() => setUIState(prev => ({ ...prev, showOptionsDropdown: false }))}
+        menuItems={optionsMenuItems}
+      />
+
+      {showSearchModal && (
+        <Suspense fallback={<LazyLoadingIndicator />}>
+          {uiState.isSearchLoaded ? (
+            <EventSearchLazy visible={showSearchModal} onClose={handleCloseSearch} />
+          ) : (
+            <LazyLoadingIndicator />
+          )}
+        </Suspense>
+      )}
+
       {showBigCalendar && (
         <Animated.View
           style={[
@@ -677,7 +773,7 @@ export default function CalendarScreen() {
             },
           ]}
         >
-          <SafeAreaView style={{ flex: 1 }}>
+          <SafeAreaView style={{ flex: 1 }} edges={['top', 'right', 'left']}>
             <View style={styles.buttonRow}>
               <Button title="Day" onPress={() => setBigCalendarMode('day')} color={bigCalendarMode === 'day' ? colors.primary : colors.grey} />
               <Button title="Week" onPress={() => setBigCalendarMode('week')} color={bigCalendarMode === 'week' ? colors.primary : colors.grey} />
@@ -693,7 +789,6 @@ export default function CalendarScreen() {
   );
 }
 
-// Styles
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
@@ -740,24 +835,37 @@ const styles = StyleSheet.create({
   },
   eventsListContainer: {
     backgroundColor: colors.white,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3.84,
-    elevation: 5,
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 8,
     overflow: 'hidden',
   },
   dragHandle: {
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    backgroundColor: colors.white,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.divider,
+  },
+  dragHandleBackground: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: colors.white,
   },
   dragIndicator: {
     width: 40,
     height: 4,
-    backgroundColor: colors.grey,
+    backgroundColor: colors.textMuted,
     borderRadius: 2,
+    zIndex: 1,
   },
   eventsContent: {
     flex: 1,
@@ -775,6 +883,52 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-around',
     margin: 8,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    justifyContent: 'flex-start',
+    alignItems: 'flex-end',
+    paddingTop: 60,
+    paddingRight: 16,
+  },
+  dropdownContainer: {
+    marginTop: 60,
+    marginRight: 16,
+  },
+  dropdownMenu: {
+    backgroundColor: colors.cardBackground,
+    borderRadius: 12,
+    minWidth: 200,
+    maxWidth: '80%',
+    shadowColor: colors.black,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+  },
+  dropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.cardBorder,
+  },
+  dropdownItemLast: {
+    borderBottomWidth: 0,
+  },
+  dropdownIcon: {
+    marginRight: 12,
+    width: 20,
+  },
+  dropdownText: {
+    fontSize: 16,
+    color: colors.text,
+    fontWeight: '500',
+    flex: 1,
   },
 });
 

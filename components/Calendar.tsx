@@ -17,7 +17,7 @@ export const dateHelpers = {
   },
 };
 
-// --- Event List ---
+// --- Enhanced Event List ---
 const EventItem = React.memo<{
   item: CalendarEvent;
   date: string;
@@ -40,22 +40,42 @@ const EventItem = React.memo<{
 
   return (
     <TouchableOpacity onPress={handlePress} style={styles.eventItem}>
-      <View style={{ flex: 1, marginRight: 12 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          {item.hexcode && <View style={[styles.colorDot, { backgroundColor: item.hexcode }]} />}
-          <Text style={styles.eventTitle}>{item.title}</Text>
-          {isMultiDay && (
-            <Text style={styles.badge}>{badgeText}</Text>
+      <View style={styles.eventItemContent}>
+        <View style={styles.eventHeader}>
+          {item.hexcode && (
+            <View style={[styles.colorIndicator, { backgroundColor: item.hexcode }]} />
           )}
+          <View style={styles.eventTitleContainer}>
+            <Text style={styles.eventTitle} numberOfLines={1}>
+              {item.title}
+            </Text>
+            {isMultiDay && (
+              <View style={styles.badgeContainer}>
+                <Text style={styles.badgeText}>{badgeText}</Text>
+              </View>
+            )}
+          </View>
+          <View style={styles.timeContainer}>
+            <Text style={styles.eventTime}>{formatTimeDisplay(item)}</Text>
+          </View>
         </View>
+        
         {item.location && (
-          <Text style={styles.eventLocation}>📍 {item.location}</Text>
+          <View style={styles.locationContainer}>
+            <Ionicons name="location-outline" size={14} color={colors.textSecondary} />
+            <Text style={styles.eventLocation} numberOfLines={1}>
+              {item.location}
+            </Text>
+          </View>
         )}
+        
         {isMultiDay && (
-          <Text style={styles.eventRange}>{formatDateRange(item)}</Text>
+          <View style={styles.dateRangeContainer}>
+            <Ionicons name="calendar-outline" size={14} color={colors.success} />
+            <Text style={styles.eventRange}>{formatDateRange(item)}</Text>
+          </View>
         )}
       </View>
-      <Text style={styles.eventTime}>{formatTimeDisplay(item)}</Text>
     </TouchableOpacity>
   );
 });
@@ -70,9 +90,9 @@ export const EventsList = React.memo<{ date: string }>(({ date }) => {
   const router = useRouter();
 
   const events = useMemo(() => getEventsForDate(date), [date, getEventsForDate]);
+  
   const formattedDate = useMemo(() => {
-    const d = new Date(date);
-    return d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+    return dateTimeHelpers.formatDateForDisplay(date);
   }, [date]);
 
   const handleEventPress = useCallback((event: CalendarEvent) => {
@@ -93,20 +113,29 @@ export const EventsList = React.memo<{ date: string }>(({ date }) => {
   const keyExtractor = useCallback((item: CalendarEvent) => item.id, []);
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.background }}>
+    <View style={styles.eventsListContainer}>
       <View style={styles.dateHeader}>
-        <Text style={styles.dateHeaderText}>{formattedDate}</Text>
+        <View style={styles.dateHeaderContent}>
+          <Ionicons name="calendar" size={20} color={colors.primary} />
+          <Text style={styles.dateHeaderText}>{formattedDate}</Text>
+          <View style={styles.eventCountBadge}>
+            <Text style={styles.eventCountText}>{events.length}</Text>
+          </View>
+        </View>
       </View>
+      
       {events.length === 0 ? (
         <View style={styles.emptyState}>
-          <Text style={styles.emptyText}>No events for this date.</Text>
+          <Ionicons name="calendar-outline" size={48} color={colors.textMuted} />
+          <Text style={styles.emptyTitle}>No events today</Text>
+          <Text style={styles.emptySubtitle}>Tap the + button to create an event</Text>
         </View>
       ) : (
         <FlatList
           data={events}
           keyExtractor={keyExtractor}
           renderItem={renderEventItem}
-          getItemLayout={(_, index) => ({ length: 80, offset: 80 * index, index })}
+          getItemLayout={(_, index) => ({ length: 100, offset: 100 * index, index })}
           removeClippedSubviews
           maxToRenderPerBatch={5}
           windowSize={5}
@@ -115,19 +144,20 @@ export const EventsList = React.memo<{ date: string }>(({ date }) => {
           extraData={date}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
-          style={{ flex: 1 }}
+          style={styles.eventsFlatList}
           contentContainerStyle={styles.flatListContent}
+          ItemSeparatorComponent={() => <View style={styles.eventSeparator} />}
         />
       )}
     </View>
   );
 });
 
-// --- Calendar Picker ---
+// --- Enhanced Calendar Picker ---
 type SingleDateCalendarProps = {
   selectedDate: string;
   setSelectedDate: (date: string) => void;
-  onDoubleTapDay?: (date: string) => void; // <-- Add this
+  onDoubleTapDay?: (date: string) => void;
 };
 
 const SCREEN_HEIGHT = Dimensions.get('window').height;
@@ -139,8 +169,9 @@ export const SingleDateCalendar: React.FC<SingleDateCalendarProps> = ({
 }) => {
   const { getEventsForDate } = useEvents();
   const pagerRef = useRef<PagerView>(null);
+  const isUpdatingRef = useRef(false);
+  const lastPagePositionRef = useRef(1);
 
-  // Always use string math for month index
   const getMonthIndex = (dateStr: string) => {
     const [year, month] = dateStr.split('-').map(Number);
     return (year - 2000) * 12 + (month - 1);
@@ -154,22 +185,35 @@ export const SingleDateCalendar: React.FC<SingleDateCalendarProps> = ({
     return `${year}-${String(month).padStart(2, '0')}`;
   };
 
-  // Mark dates with events
+  // Enhanced marks with better visual indicators
   const marks = useMemo(() => {
     const marks: Record<string, any> = {};
     for (let i = 0; i < 365; i++) {
-      const date = new Date();
-      date.setDate(date.getDate() + i - 180);
+      const date = new Date(Date.UTC(2000, 0, 1));
+      date.setUTCDate(date.getUTCDate() + i - 180);
       const dateStr = date.toISOString().slice(0, 10);
-      if (getEventsForDate(dateStr).length > 0) {
-        marks[dateStr] = { marked: true, dotColor: colors.primary };
+      const events = getEventsForDate(dateStr);
+      if (events.length > 0) {
+        marks[dateStr] = { 
+          marked: true, 
+          dotColor: events[0]?.hexcode || colors.primary,
+          dots: events.slice(0, 3).map((event, index) => ({
+            key: index,
+            color: event.hexcode || colors.primary,
+            selectedDotColor: colors.white,
+          }))
+        };
       }
     }
-    marks[selectedDate] = { ...(marks[selectedDate] || {}), selected: true, selectedColor: colors.primary };
+    marks[selectedDate] = { 
+      ...(marks[selectedDate] || {}), 
+      selected: true, 
+      selectedColor: colors.primary,
+      selectedTextColor: colors.white,
+    };
     return marks;
   }, [getEventsForDate, selectedDate]);
 
-  // Double-tap logic for day cells only
   const lastTapRef = useRef<number>(0);
   const onDayPress = useCallback(
     (day: { dateString: string }) => {
@@ -186,73 +230,66 @@ export const SingleDateCalendar: React.FC<SingleDateCalendarProps> = ({
     [setSelectedDate, onDoubleTapDay]
   );
 
-  // Only render previous, current, and next month for performance
   const monthPages = useMemo(() => {
-    const pages = [];
-    for (let i = currentMonthIndex - 1; i <= currentMonthIndex + 1; i++) {
-      const monthStr = getMonthString(i);
-      pages.push(
-        <View key={monthStr} style={{ flex: 1 }}>
-          <Calendar
-            current={monthStr + '-01'}
-            onDayPress={onDayPress}
-            markedDates={marks}
-            hideArrows={true}
-            hideExtraDays={false}
-            disableMonthChange={true}
-            theme={{
-              todayTextColor: colors.success,
-              dotColor: colors.primary,
-              arrowColor: colors.primary,
-              textSectionTitleColor: colors.text,
-              monthTextColor: colors.text,
-              dayTextColor: colors.text,
-            }}
-            style={styles.calendar}
-          />
-        </View>
-      );
-    }
-    return pages;
+    return [
+      <View key="prev" style={styles.calendarPage}>
+        <Calendar
+          current={getMonthString(currentMonthIndex - 1) + '-01'}
+          onDayPress={onDayPress}
+          markedDates={marks}
+          hideArrows={true}
+          hideExtraDays={false}
+          disableMonthChange={true}
+          theme={calendarTheme}
+          style={styles.calendar}
+        />
+      </View>,
+      <View key="current" style={styles.calendarPage}>
+        <Calendar
+          current={getMonthString(currentMonthIndex) + '-01'}
+          onDayPress={onDayPress}
+          markedDates={marks}
+          hideArrows={true}
+          hideExtraDays={false}
+          disableMonthChange={true}
+          theme={calendarTheme}
+          style={styles.calendar}
+        />
+      </View>,
+      <View key="next" style={styles.calendarPage}>
+        <Calendar
+          current={getMonthString(currentMonthIndex + 1) + '-01'}
+          onDayPress={onDayPress}
+          markedDates={marks}
+          hideArrows={true}
+          hideExtraDays={false}
+          disableMonthChange={true}
+          theme={calendarTheme}
+          style={styles.calendar}
+        />
+      </View>
+    ];
   }, [currentMonthIndex, marks, onDayPress]);
 
-  // Handle vertical swipe to change month
   const handlePageSelected = useCallback(
     (e: { nativeEvent: { position: number } }) => {
       const newIndex = currentMonthIndex - 1 + e.nativeEvent.position;
       if (newIndex !== currentMonthIndex) {
         setCurrentMonthIndex(newIndex);
-
-        // Always set selectedDate to first of new month in string format
-        const newMonthStr = getMonthString(newIndex);
-        // Only update if selectedDate is not already in this month
-        if (!selectedDate.startsWith(newMonthStr)) {
-          setSelectedDate(`${newMonthStr}-01`);
-        }
       }
     },
-    [currentMonthIndex, setSelectedDate, selectedDate]
+    [currentMonthIndex]
   );
 
-  // Only update pager if selectedDate's month is different from currentMonthIndex
   useEffect(() => {
-    const newIndex = getMonthIndex(selectedDate);
-    const selectedMonth = selectedDate.slice(0, 7);
-    const currentMonth = getMonthString(currentMonthIndex);
-
-    // Only update if the month is truly different and the index is not already correct
-    if (selectedMonth !== currentMonth && newIndex !== currentMonthIndex && pagerRef.current) {
-      pagerRef.current.setPageWithoutAnimation(1); // Always keep current month in the middle
-      setCurrentMonthIndex(newIndex);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedDate]);
+    lastPagePositionRef.current = 1;
+  }, []);
 
   return (
-    <View style={{ flex: 1, minHeight: SCREEN_HEIGHT * 0.45 }}>
+    <View style={styles.calendarContainer}>
       <PagerView
         ref={pagerRef}
-        style={{ flex: 1, minHeight: SCREEN_HEIGHT * 0.45 }}
+        style={styles.pagerView}
         orientation="vertical"
         initialPage={1}
         onPageSelected={handlePageSelected}
@@ -265,100 +302,233 @@ export const SingleDateCalendar: React.FC<SingleDateCalendarProps> = ({
 };
 
 const styles = StyleSheet.create({
+  // Calendar Container
+  calendarContainer: {
+    flex: 1,
+    minHeight: SCREEN_HEIGHT * 0.45,
+  },
+  calendarPage: {
+    flex: 1,
+  },
+  pagerView: {
+    flex: 1,
+    minHeight: SCREEN_HEIGHT * 0.45,
+  },
+  
+  // Calendar Styling
   calendar: {
-    borderRadius: 16,
-    margin: 8,
-    elevation: 2,
-    backgroundColor: colors.background,
+    borderRadius: 20,
+    margin: 16,
+    marginBottom: 8,
+    elevation: 4,
+    shadowColor: colors.black,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    backgroundColor: colors.white,
+    padding: 8,
+  },
+
+  // Events List Container
+  eventsListContainer: {
+    flex: 1,
+    backgroundColor: colors.white,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    shadowColor: colors.black,
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 8,
+    overflow: 'hidden',
+  },
+
+  // Date Header
+  dateHeader: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.divider,
+    backgroundColor: colors.white,
+  },
+  dateHeaderContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   dateHeaderText: {
+    flex: 1,
     color: colors.text,
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700',
-    textAlign: 'left',
+    marginLeft: 12,
+  },
+  eventCountBadge: {
+    backgroundColor: colors.primaryLight,
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    minWidth: 24,
+    alignItems: 'center',
+  },
+  eventCountText: {
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+
+  // Event Items
+  eventsFlatList: {
+    flex: 1,
+  },
+  flatListContent: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    flexGrow: 1,
+  },
+  eventSeparator: {
+    height: 12,
   },
   eventItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-    marginVertical: 2,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.offWhite,
-    backgroundColor: colors.background,
-    borderRadius: 8,
-    borderLeftWidth: 4,
-    borderLeftColor: colors.darkGreen,
+    backgroundColor: colors.white,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 8,
+    shadowColor: colors.black,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
   },
-  colorDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    marginRight: 8,
+  eventItemContent: {
+    flex: 1,
+  },
+  eventHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  colorIndicator: {
+    width: 4,
+    height: 40,
+    borderRadius: 2,
+    marginRight: 12,
+  },
+  eventTitleContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
   },
   eventTitle: {
     color: colors.text,
-    fontWeight: '600',
-  },
-  badge: {
-    color: colors.darkGreen,
-    fontSize: 10,
-    marginLeft: 6,
-    backgroundColor: colors.lightGreen,
-    paddingHorizontal: 4,
-    paddingVertical: 1,
-    borderRadius: 3,
-  },
-  eventLocation: {
-    color: colors.grey,
-    fontSize: 12,
-    marginTop: 2,
-  },
-  eventRange: {
-    color: colors.darkGreen,
-    fontSize: 11,
-    marginTop: 2,
-  },
-  emptyState: {
-    paddingVertical: 20,
-    alignItems: 'center',
-    flex: 1,
-    justifyContent: 'center',
-  },
-  flatListContent: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    flexGrow: 1,
-  },
-  container: {
-    padding: 12,
-    backgroundColor: colors.background,
-    borderRadius: 12,
-  },
-  dateHeader: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginBottom: 8,
-  },
-  eventColorDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.primary,
-    marginRight: 12,
-  },
-  eventInfo: {
+    fontWeight: '600',
     flex: 1,
+    marginRight: 8,
+  },
+  badgeContainer: {
+    backgroundColor: colors.successLight,
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  badgeText: {
+    color: colors.success,
+    fontSize: 10,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+  },
+  timeContainer: {
+    alignItems: 'flex-end',
   },
   eventTime: {
-    fontSize: 13,
-    color: colors.grey,
+    fontSize: 14,
+    color: colors.textSecondary,
+    fontWeight: '500',
   },
-  emptyText: {
-    color: colors.grey,
-    fontStyle: 'italic',
-    marginTop: 12,
+  locationContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  eventLocation: {
+    color: colors.textSecondary,
+    fontSize: 14,
+    marginLeft: 6,
+    flex: 1,
+  },
+  dateRangeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  eventRange: {
+    color: colors.success,
+    fontSize: 13,
+    fontWeight: '500',
+    marginLeft: 6,
+  },
+
+  // Empty State
+  emptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  emptyTitle: {
+    color: colors.textSecondary,
+    fontSize: 18,
+    fontWeight: '600',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptySubtitle: {
+    color: colors.textMuted,
+    fontSize: 14,
+    textAlign: 'center',
+    paddingHorizontal: 32,
   },
 });
+
+// Calendar theme configuration (separate from styles)
+const calendarTheme = {
+  todayTextColor: colors.success,
+  dotColor: colors.primary,
+  arrowColor: colors.primary,
+  textSectionTitleColor: colors.textSecondary,
+  monthTextColor: colors.text,
+  dayTextColor: colors.text,
+  selectedDayBackgroundColor: colors.primary,
+  selectedDayTextColor: colors.white,
+  textDayFontSize: 16,
+  textMonthFontSize: 18,
+  textDayHeaderFontSize: 14,
+  textDayFontWeight: '500' as const,
+  textMonthFontWeight: '600' as const,
+  textDayHeaderFontWeight: '600' as const,
+  'stylesheet.calendar.header': {
+    dayHeader: {
+      color: colors.textSecondary,
+      fontWeight: '600' as const,
+      fontSize: 14,
+      paddingVertical: 8,
+    },
+  },
+  'stylesheet.day.basic': {
+    base: {
+      width: 36,
+      height: 36,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: 18,
+    },
+    text: {
+      fontSize: 16,
+      fontWeight: '500' as const,
+      color: colors.text,
+    },
+  },
+};

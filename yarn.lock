@@ -1922,6 +1922,11 @@
     "@urql/core" "^5.1.2"
     wonka "^6.3.2"
 
+"@vvo/tzdb@^6.183.0":
+  version "6.183.0"
+  resolved "https://registry.npmjs.org/@vvo/tzdb/-/tzdb-6.183.0.tgz"
+  integrity sha512-6C/4Lvv7jVHkfAsIEOMccZ4w1zmGAQxUVfdjZiYNu68+NMrFBVKyZZnmXeOWySihqDPxjO7FEbOpBuAf/ASKpg==
+
 "@xmldom/xmldom@^0.8.8":
   version "0.8.10"
   resolved "https://registry.npmjs.org/@xmldom/xmldom/-/xmldom-0.8.10.tgz"
