@@ -45,7 +45,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 12, // ✅ Increased from 8 to 12
     gap: 12, // ✅ Increased from 8 to 12
-    backgroundColor: 'rgba(255, 255, 255, 0.9)', // ✅ Slightly more opaque
+    backgroundColor: 'rgba(255, 255, 255, 0.7)', // ✅ Slightly more opaque
     borderRadius: 20, // ✅ Increased border radius
     marginHorizontal: 50, // ✅ Reduced to allow for wider container
     shadowColor: '#000',

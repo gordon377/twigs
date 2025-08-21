@@ -1,4 +1,3 @@
-import Button from '@/components/Button';
 import CustomInput from '@/components/TextInput';
 import { useState } from 'react';
 import { StyleSheet, KeyboardAvoidingView, Image, View, Text, TouchableOpacity, Platform, ActivityIndicator } from 'react-native';
