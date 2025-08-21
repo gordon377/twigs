@@ -380,7 +380,7 @@ export default function CalendarScreen() {
       const hasEventsToday = hasEventsOnDate(today);
       const targetHeight = hasEventsToday ? defaultHeight : minHeight;
 
-      const calendarPromise = calendarRef.current?.scrollToToday() || Promise.resolve();
+      const calendarPromise = calendarRef.current?.backToToday() || Promise.resolve();
 
       const heightPromise = new Promise<void>((resolve) => {
         eventsListHeight.stopAnimation();
@@ -668,6 +668,7 @@ export default function CalendarScreen() {
     <View style={styles.pageContainer}>
       <View style={styles.calendarContainer}>
         <SingleDateCalendar
+          ref={calendarRef}
           selectedDate={selectedDate}
           setSelectedDate={handleDatePress}
         />
