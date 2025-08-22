@@ -9,7 +9,6 @@ import { updateProfile } from '@/utils/api';
 import { useProfile } from '@/contexts/ProfileContext';
 import { Ionicons } from '@expo/vector-icons';
 import { logIn } from '@/utils/api';
-import LeafTwig from '@/assets/appIcons/leafTwig.svg';
 
 const axios = require('axios').default;
 

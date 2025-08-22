@@ -2,7 +2,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import * as SecureStore from 'expo-secure-store';
 import * as SplashScreen from 'expo-splash-screen';
-import { updateProfile, logOut as apiLogOut } from '@/utils/api';
+import { logIn as logInAPI } from '@/utils/api';
 import { useProfile } from '@/contexts/ProfileContext';
 import { router } from 'expo-router';
 
@@ -10,7 +10,6 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   checkAuthStatus: () => Promise<void>;
-  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -21,10 +20,12 @@ SplashScreen.preventAutoHideAsync().catch(() => {
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  console.log('🚀 AuthProvider rendered');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [splashReady, setSplashReady] = useState(false); // ✅ Track splash screen state
   const { setProfileData, setIsLoading: setProfileLoading } = useProfile();
+
 
   const hideSplashScreen = async () => {
     try {
@@ -40,14 +41,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       console.log('🔍 Checking authentication status...');
       
-      const accessToken = await SecureStore.getItemAsync('accessToken');
-      const refreshToken = await SecureStore.getItemAsync('refreshToken');
+      const email = await SecureStore.getItemAsync('email');
+      const password = await SecureStore.getItemAsync('password');
       
-      if (accessToken && refreshToken) {
-        console.log('✅ Tokens found, attempting auto-login...');
+      if (email && password) {
+        console.log('✅ Login Credentials found, attempting auto-login...');
         
         try {
-          await updateProfile(setProfileData, setProfileLoading);
+          await logInAPI(() => {}, password, email, () => {}, setProfileData, setProfileLoading, router, { silent: true });
           setIsAuthenticated(true);
           console.log('✅ Auto-login successful');
           
@@ -58,6 +59,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } catch (error) {
           console.log('❌ Token validation failed:', error);
           
+          await SecureStore.deleteItemAsync('email');
+          await SecureStore.deleteItemAsync('password');
           await SecureStore.deleteItemAsync('accessToken');
           await SecureStore.deleteItemAsync('refreshToken');
           
@@ -110,20 +113,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [isLoading, splashReady]);
 
-  const logout = async () => {
-    try {
-      await apiLogOut(() => {}, { replace: () => {} });
-      setIsAuthenticated(false);
-      router.replace('/');
-    } catch (error) {
-      console.error('Logout error:', error);
-      await SecureStore.deleteItemAsync('accessToken');
-      await SecureStore.deleteItemAsync('refreshToken');
-      setIsAuthenticated(false);
-      router.replace('/');
-    }
-  };
-
   useEffect(() => {
     console.log('🚀 AuthProvider useEffect running');
     
@@ -147,7 +136,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isAuthenticated,
     isLoading,
     checkAuthStatus,
-    logout,
   };
 
   return (

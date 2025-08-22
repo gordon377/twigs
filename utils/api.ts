@@ -6,6 +6,8 @@ import { Alert } from 'react-native';
 import { CalendarEvent, dateTimeHelpers } from '@/types/events';
 import { colors } from '@/styles/styles';
 
+const API_BASE = 'https://twig-production.up.railway.app';
+
 {/* Profile/User Management */}
 
 // logOut
@@ -31,20 +33,23 @@ export const logOut = async (
     }
 
     console.log('Making API call...');
-    const response = await axios.post(
-      'https://twig-production.up.railway.app/logout',
-      { refreshToken: refreshToken },
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json'
+    const response = await fetch(`${API_BASE}/logout`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
         },
-      }
-    );
+      body: JSON.stringify({ refreshToken: refreshToken }),
+      });
     console.log('API call successful');
-    console.log('Response data:', response.data);
+    console.log('Response:', response);
+
+    const data = await response.json();
+    console.log('Response data:', data);
 
     if (response.status === 200) {
+      await SecureStore.deleteItemAsync('email');
+      await SecureStore.deleteItemAsync('password');
       await SecureStore.deleteItemAsync('accessToken');
       await SecureStore.deleteItemAsync('refreshToken');
       console.log('Tokens cleared');
@@ -74,84 +79,82 @@ export const logIn = async (
   setErrors: (data: any) => void,
   setProfileData: (data: any) => void,
   setIsLoading: (loading: boolean) => void,
-  router: any
+  router: any,
+  options?: { silent?: boolean }
 ) => {
-  console.log("logIn: before validation");
+  const silent = options?.silent;
 
-  if (setIsLoggingIn) setIsLoggingIn(true);
+  if (!silent && setIsLoggingIn) setIsLoggingIn(true);
 
   function cleanUp() {
-    setErrors([]);
+    if (!silent) setErrors([]);
   }
 
   try {
-    console.log("logIn: after validation");
-    const logInData = logInParsed({ email, password });
-    console.log("Parsed Data: " + logInData);
-  } catch (error) {
-    if (error instanceof v.ValiError) {
-      console.log("Validation Error: ", error.message);
-      console.log("Validation Issue: ", error.issues);
-      alert("Validation Error: " + error.message);
-      const errorMessages = error.issues.map((issue) => issue.message);
-      setErrors(errorMessages);
-    } else {
-      console.log("Unexpected Error: ", error);
+    if (!silent) {
+      const logInData = logInParsed({ email, password });
     }
-    if (setIsLoggingIn) setIsLoggingIn(false);
+  } catch (error) {
+    if (!silent) {
+      if (error instanceof v.ValiError) {
+        const errorMessages = error.issues.map((issue) => issue.message);
+        setErrors(errorMessages);
+        alert("Validation Error: " + error.message);
+      } else {
+        alert("Unexpected Error: " + error);
+      }
+      if (setIsLoggingIn) setIsLoggingIn(false);
+    }
     return;
   }
 
   try {
-    const response = await axios.post('https://twig-production.up.railway.app/login', {
-      email,
-      password,
+    const response = await fetch(`${API_BASE}/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
     });
 
-    await SecureStore.setItemAsync('accessToken', response.data.access_token);
-    await SecureStore.setItemAsync('refreshToken', response.data.refresh_token);
+    const data = await response.json();
 
-    console.log("Access Token stored!");
-    console.log("Refresh Token stored!");
-
-    try {
-      await updateProfile(setProfileData, setIsLoading);
-    } catch (error) {
-      console.log('Error updating profile:', error);
+    if (!response.ok) {
+      if (!silent) alert("Login failed. Please check your credentials and try again.");
+      return;
     }
 
-    // ✅ NEW: Initialize calendars after successful login
+    await SecureStore.setItemAsync('email', email);
+    await SecureStore.setItemAsync('password', password);
+    await SecureStore.setItemAsync('accessToken', data.access_token);
+    await SecureStore.setItemAsync('refreshToken', data.refresh_token);
+
     try {
-      console.log('🔧 Initializing calendars after login...');
-      
-      // Use a slight delay to ensure EventsContext is ready
+      await updateProfile(setProfileData, silent ? undefined : setIsLoading);
+    } catch (error) {
+      if (!silent) console.log('Error updating profile:', error);
+    }
+
+    if (!silent) {
+      // Initialize calendars after successful login
       setTimeout(async () => {
         try {
-          // Import the context function
           const { initializeCalendarsFromAPI } = require('@/contexts/EventsContext');
           if (initializeCalendarsFromAPI) {
             await initializeCalendarsFromAPI();
-            console.log('✅ Calendars initialized successfully');
           }
         } catch (initError) {
-          console.error('❌ Calendar initialization failed:', initError);
+          if (!silent) console.error('❌ Calendar initialization failed:', initError);
         }
       }, 1000);
-    } catch (error) {
-      console.log('Error initializing calendars:', error);
-    }
 
-    router.replace('/(tabs)/profile');
-  } catch (error: any) {
-    if (error.response && error.response.data) {
-      console.log("Server Error Data: ", error.response.data);
-    } else {
-      console.log("Server Error: ", error);
+      router.replace('/(tabs)/profile');
     }
-    alert("Login failed. Please check your credentials and try again.");
+  } catch (error: any) {
+    if (!silent) {
+      alert("Login failed. Please check your credentials and try again.");
+    }
   } finally {
     cleanUp();
-    if (setIsLoggingIn) setIsLoggingIn(false);
+    if (!silent && setIsLoggingIn) setIsLoggingIn(false);
   }
 };
 
