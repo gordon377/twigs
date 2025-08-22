@@ -346,6 +346,7 @@ export default function CalendarScreen() {
       setSelectedDate(date);
       lastTapRef.current = now;
     }
+    console.log('Selected date changed to:', date);
   }, [zoomAnim]);
 
   const handlePageChange = useCallback((event: any) => {

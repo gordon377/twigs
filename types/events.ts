@@ -1,4 +1,5 @@
 import { timeZonesNames, getTimeZones, TimeZone } from '@vvo/tzdb';
+import { zonedTimeToUtc } from 'date-fns-tz';
 
 export type Calendar = {
   id: string;
@@ -46,14 +47,10 @@ export const dateTimeHelpers = {
     timezone: string = 'UTC'
   ): string => {
     try {
-      if (!timeString) return `${dateString}T00:00:00Z`;
-      // Use tzdb for offset if needed
-      const tz = findTimeZone(timezone);
-      const [year, month, day] = dateString.split('-').map(Number);
-      const [hour, minute, second] = timeString.split(':').map(Number);
-      const localDate = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
-      const offsetMinutes = tz ? tz.currentTimeOffsetInMinutes : 0;
-      const utcDate = new Date(localDate.getTime() - offsetMinutes * 60000);
+      const localDateTime = timeString
+        ? `${dateString}T${timeString}`
+        : `${dateString}T00:00:00`;
+      const utcDate = zonedTimeToUtc(localDateTime, timezone);
       return utcDate.toISOString();
     } catch {
       return `${dateString}T00:00:00Z`;

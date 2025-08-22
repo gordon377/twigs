@@ -594,20 +594,29 @@ const calendarTheme = {
       fontWeight: '600' as const,
       fontSize: 14,
       paddingVertical: 8,
+      textAlign: 'center',
+      flex: 1,
+    },
+    header: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
     },
   },
   'stylesheet.day.basic': {
     base: {
-      width: 36,
-      height: 36,
       alignItems: 'center',
       justifyContent: 'center',
       borderRadius: 18,
+      minWidth: 36,
+      minHeight: 36,
     },
     text: {
       fontSize: 16,
       fontWeight: '500' as const,
       color: colors.text,
+      textAlign: 'center',
+      alignSelf: 'center',
     },
     selectedDot: {
       width: 10,

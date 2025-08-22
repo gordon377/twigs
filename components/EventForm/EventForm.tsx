@@ -1,4 +1,4 @@
-import React, { useState, useImperativeHandle, forwardRef, useCallback } from 'react';
+import React, { useState, useImperativeHandle, forwardRef, useCallback, useRef } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, StyleSheet } from 'react-native';
 import { colors } from '@/styles/styles';
 import { CalendarEvent, dateTimeHelpers, getAllTimezones } from '@/types/events';
@@ -9,6 +9,8 @@ import { EventDateTimePicker } from './DateTimePicker';
 import { CalendarSelector } from './CalendarSelector';
 import { InviteesManager } from './InviteesManager';
 import { TimezoneSelector } from './TimezoneSelector';
+import { useLocalSearchParams } from 'expo-router';
+import { zonedTimeToUtc } from 'date-fns-tz';
 
 interface EventFormProps {
   initialData?: Partial<CalendarEvent>;
@@ -17,31 +19,77 @@ interface EventFormProps {
   isLoading?: boolean;
 }
 
-export const EventForm = forwardRef<any, EventFormProps>(({ 
-  initialData, 
-  onSubmit, 
-  submitButtonText = 'Save Event', 
-  isLoading = false 
+export const EventForm = forwardRef<any, EventFormProps>(({
+  initialData,
+  onSubmit,
+  submitButtonText = 'Save Event',
+  isLoading = false
 }, ref) => {
   const { calendars, getUserTimezone } = useEvents();
-  
+  const params = useLocalSearchParams();
+  const selectedDate = typeof params.selectedDate === 'string' ? params.selectedDate : undefined;
+
+  console.log('Selected Date from params:', selectedDate);
+
+  // Store the original base date for toggling
+  const baseDateRef = useRef<string>(selectedDate || dateTimeHelpers.getTodayStringInTimezone());
+
+  console.log('Base Date for EventForm:', baseDateRef.current);
+
+  // Helper to get current time rounded to nearest hour
+  const getRoundedTime = () => {
+    const now = new Date();
+    now.setMinutes(0, 0, 0);
+    return now.toTimeString().slice(0, 8); // "HH:00:00"
+  };
+
   // ✅ SIMPLIFIED: Initialize with ISO format
   const [eventData, setEventData] = useState<Partial<CalendarEvent>>(() => {
-    // Default to today with default times
-    const todayDate = dateTimeHelpers.getTodayStringInTimezone();
-    const defaultStartISO = dateTimeHelpers.createISOString(todayDate, '12:00:00');
-    const defaultEndISO = dateTimeHelpers.createISOString(todayDate, '13:00:00');
-    
+    const userTimezone = getUserTimezone();
+    // Always treat selectedDate as a date in the user's timezone.
+    // If selectedDate is provided, use it as the base date and default to 09:00-10:00.
+    // If not, use today in user's timezone and current hour.
+    let baseDate = selectedDate || dateTimeHelpers.getTodayStringInTimezone(userTimezone);
+    let startHour = 9;
+    let endHour = 10;
+
+    if (!selectedDate) {
+      // No selectedDate: use current hour in user's timezone
+      const now = new Date();
+      const nowInUserTZ = new Date(
+        now.toLocaleString('en-US', { timeZone: userTimezone })
+      );
+      startHour = nowInUserTZ.getHours();
+      endHour = (startHour + 1) % 24;
+    }
+
+    // Compose local datetime strings
+    const startLocal = `${baseDate}T${String(startHour).padStart(2, '0')}:00:00`;
+    const endLocal = `${baseDate}T${String(endHour).padStart(2, '0')}:00:00`;
+
+    // Use zonedTimeToUtc to get correct UTC ISO strings for storage
+    const defaultStartISO = zonedTimeToUtc(startLocal, userTimezone).toISOString();
+    const defaultEndISO = zonedTimeToUtc(endLocal, userTimezone).toISOString();
+
+    // Default calendar selection: first calendar in local db (if available)
+    // Fallback to 'Default' and '1' if not loaded yet
+    let defaultCalendarId = '1';
+    let defaultCalendarName = 'Default';
+    if (Array.isArray(calendars) && calendars.length > 0) {
+      defaultCalendarId = calendars[0].id;
+      defaultCalendarName = calendars[0].name;
+    }
+
     return {
       title: '',
       startDate: defaultStartISO,
       endDate: defaultEndISO,
-      timezone: getUserTimezone(),
+      timezone: userTimezone,
       location: '',
       description: '',
       invitees: [],
-      calendar: 'Default',
-      calendarId: '1',
+      calendar: defaultCalendarName,
+      calendarId: defaultCalendarId,
       ...initialData, // Override with provided data
     };
   });
@@ -75,18 +123,23 @@ export const EventForm = forwardRef<any, EventFormProps>(({
 
   // ✅ All-day toggle
   const handleAllDayToggle = () => {
-    const currentStartDate = dateTimeHelpers.extractDateFromISO(eventData.startDate || '');
-    const currentEndDate = dateTimeHelpers.extractDateFromISO(eventData.endDate || '');
-    
+    const userTimezone = eventData.timezone || getUserTimezone();
+    const localDate = baseDateRef.current;
+
     if (isAllDay) {
       // Switch to timed event
-      const newStartISO = dateTimeHelpers.createISOString(currentStartDate, '12:00:00');
-      const newEndISO = dateTimeHelpers.createISOString(currentEndDate, '13:00:00');
+      const startTime = getRoundedTime();
+      const newStartISO = dateTimeHelpers.createISOString(localDate, startTime, userTimezone);
+      const newEndISO = dateTimeHelpers.createISOString(
+        localDate,
+        `${String((parseInt(startTime.slice(0, 2)) + 1) % 24).padStart(2, '0')}:00:00`,
+        userTimezone
+      );
       updateEventData('startDate', newStartISO);
       updateEventData('endDate', newEndISO);
     } else {
       // Switch to all-day event
-      const { start, end } = dateTimeHelpers.createAllDayEventISO(currentStartDate);
+      const { start, end } = dateTimeHelpers.createAllDayEventISO(localDate);
       updateEventData('startDate', start);
       updateEventData('endDate', end);
     }
