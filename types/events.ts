@@ -57,10 +57,14 @@ export const dateTimeHelpers = {
     }
   },
 
-  createAllDayEventISO: (dateString: string): { start: string; end: string } => ({
-    start: `${dateString}T00:00:00Z`,
-    end: `${dateString}T23:59:59Z`
-  }),
+  createAllDayEventISO: (dateString: string, timezone: string = 'UTC'): { start: string; end: string } => {
+    // Create all-day event in user's timezone, then convert to UTC ISO
+    const startLocal = `${dateString}T00:00:00`;
+    const endLocal = `${dateString}T23:59:59`;
+    const start = zonedTimeToUtc(startLocal, timezone).toISOString();
+    const end = zonedTimeToUtc(endLocal, timezone).toISOString();
+    return { start, end };
+  },
 
   extractDateFromISO: (isoString: string): string => {
     try {

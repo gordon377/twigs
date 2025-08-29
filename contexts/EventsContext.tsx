@@ -464,7 +464,7 @@ export function EventsProvider({ children }: { children: ReactNode }) {
     try {
       const setParts = [];
       const values = [];
-      
+
       if (updates.title !== undefined) {
         setParts.push('title = ?');
         values.push(updates.title);
@@ -505,14 +505,19 @@ export function EventsProvider({ children }: { children: ReactNode }) {
         setParts.push('invitees = ?');
         values.push(JSON.stringify(updates.invitees));
       }
-      
+
+      if (setParts.length === 0) {
+        // Nothing to update
+        return false;
+      }
+
       values.push(eventId);
-      
+
       await db.runAsync(
         `UPDATE events SET ${setParts.join(', ')} WHERE id = ?`,
         values
       );
-      
+
       await loadEventsFromDB();
       return true;
     } catch (error) {

@@ -647,57 +647,6 @@ export const deleteCalendar = async (calendarData: any) => {
   }
 };
 
-{/* Connection Routes */}
-
-// getConnections
-export const getConnections = async (
-  setConnectionData?: (data: any) => void,
-  setIsLoading?: (loading: boolean) => void
-) => {
-  console.log('getConnections called');
-
-  if (setIsLoading) setIsLoading(true);
-
-  try {
-    const token = await SecureStore.getItemAsync('accessToken');
-    const refreshToken = await SecureStore.getItemAsync('refreshToken');
-
-    console.log('Token retrieved:', token ? 'exists' : 'null');
-
-    if (!token) {
-      console.log('No access token found');
-      if (setIsLoading) setIsLoading(false);
-      return null;
-    }
-
-    console.log('Making API call...');
-    const response = await axios.get(
-      'https://twig-production.up.railway.app/followers',
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-      }
-    );
-    console.log('API call successful');
-    console.log('Response data:', response.data);
-
-    if (setConnectionData) setConnectionData(response.data);
-
-    return response.data;
-  } catch (error: any) {
-    console.log('Error in updateProfile:', error);
-    if (error.response && error.response.data) {
-      console.log('Server Error Data: ', error.response.data);
-    } else {
-      console.log('Server Error: ', error);
-    }
-    throw error;
-  } finally {
-    if (setIsLoading) setIsLoading(false);
-  }
-};
 
 {/* CRUD Event Routes */}
 
@@ -748,6 +697,77 @@ export const createEvent = async (rawEventData: any) => {
       success: false, 
       error: error.response?.data?.message || 'Failed to create event' 
     };
+  }
+};
+
+// ✅ FIXED: getEvents with proper date range
+export const getEvents = async (startDate: string, endDate: string) => {
+  try {
+    const token = await SecureStore.getItemAsync('accessToken');
+    if (!token) {
+      return { success: false, error: 'No authentication token' };
+    }
+
+    const startISO = `${startDate}T00:00:00Z`;
+    const endISO = `${endDate}T23:59:59Z`;
+
+    const response = await fetch(
+      `${API_BASE}/events_detail`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          startDate: startISO,
+          endDate: endISO,
+        }),
+      }
+    );
+
+    if (response.ok) {
+      const events = await response.json(); // This is an array
+      return { success: true, data: events };
+    } else {
+      const error = await response.json();
+      return { success: false, error: error.detail || 'No data received' };
+    }
+  } catch (error: any) {
+    console.error('Error in getEvents:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// getEventDetails for a specific event
+export const getEventDetails = async (eventId: string) => {
+  try {
+    const token = await SecureStore.getItemAsync('accessToken');
+    if (!token) {
+      return { success: false, error: 'No authentication token' };
+    }
+
+    const response = await fetch(
+      `${API_BASE}/events/${eventId}/details`,
+      {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    if (response.ok) {
+      const event = await response.json();
+      return { success: true, data: event };
+    } else {
+      const error = await response.json();
+      return { success: false, error: error.detail || 'No data received' };
+    }
+  } catch (error: any) {
+    console.error('Error in getEventDetails:', error);
+    return { success: false, error: error.message };
   }
 };
 
@@ -832,44 +852,355 @@ export const deleteEvent = async (eventId: any) => {
   }
 };
 
-// ✅ FIXED: getEvents with proper date range
-export const getEvents = async (startDate: string, endDate: string) => {
+{/* Event Interaction Routes */}
+
+// getEventParticipants for a specific event
+export const getEventParticipants = async (eventId: string) => {
   try {
     const token = await SecureStore.getItemAsync('accessToken');
-    if (!token) {
-      return { success: false, error: 'No authentication token' };
-    }
+    if (!token) throw new Error('No access token found');
 
-    // ✅ Convert date range to ISO for API
-    const startISO = `${startDate}T00:00:00Z`;
-    const endISO = `${endDate}T23:59:59Z`;
-
-    const response = await axios.get(
-      `https://twig-production.up.railway.app/events`,
+    const response = await fetch(
+      `${API_BASE}/events/${eventId}/participants`,
       {
-        params: {
-          startDate: startISO,
-          endDate: endISO,
-        },
+        method: 'GET',
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json'
-        },
+        }
       }
     );
 
-    if (response.data?.success) {
-      const { syncEventsWithAPI } = require('@/contexts/EventsContext');
-      await syncEventsWithAPI(response.data.data, startDate, endDate);
-      return { success: true, data: response.data };
+    if (!response.ok) {
+      const errorData = await response.json();
+      return { success: false, error: errorData.detail || 'Failed to get participants' };
     }
-    
-    return { success: false, error: 'No data received' };
+
+    const data = await response.json();
+    return { success: true, data };
   } catch (error: any) {
-    console.error('Error in getEvents:', error);
     return { success: false, error: error.message };
   }
 };
 
-{/* Event Interaction Routes */}
+// updateEventParticipants for a specific event
+export const updateEventParticipants = async (eventId: string, participants: string[]) => {
+  try {
+    const token = await SecureStore.getItemAsync('accessToken');
+    if (!token) throw new Error('No access token found');
 
+    const response = await fetch(
+      `${API_BASE}/events/${eventId}/participants`,
+      {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ participants })
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      return { success: false, error: errorData.detail || 'Failed to update participants' };
+    }
+
+    const data = await response.json();
+    return { success: true, data };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+};
+
+// Leave a specific event as a participant
+export const leaveEvent = async (eventId: string) => {
+  try {
+    const token = await SecureStore.getItemAsync('accessToken');
+    if (!token) throw new Error('No access token found');
+
+    const response = await fetch(
+      `${API_BASE}/events/${eventId}/leave`,
+      {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      return { success: false, error: errorData.detail || 'Failed to leave event' };
+    }
+
+    const data = await response.json();
+    return { success: true, data };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+};
+
+// Respond to a specific event's invite
+export const respondToEventInvite = async (eventId: string, statusState: 'accepted' | 'rejected') => {
+  try {
+    const token = await SecureStore.getItemAsync('accessToken');
+    if (!token) throw new Error('No access token found');
+
+    const response = await fetch(
+      `${API_BASE}/events/${eventId}/respond?statusState=${statusState}`,
+      {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      return { success: false, error: errorData.detail || 'Failed to respond to invite' };
+    }
+
+    const data = await response.json();
+    return { success: true, data };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+};
+
+{/* Connection Routes */}
+
+// Accept a connection request
+export const sendConnectionRequest = async (targetUsername: string) => {
+  try {
+    const token = await SecureStore.getItemAsync('accessToken');
+    if (!token) throw new Error('No access token found');
+
+    const response = await fetch(
+      `${API_BASE}/connect/${encodeURIComponent(targetUsername)}`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      return { success: false, error: errorData.detail || 'Failed to send connection request' };
+    }
+
+    const data = await response.json();
+    return { success: true, data };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+};
+
+// Accept a connection request
+export const acceptConnectionRequest = async (targetUsername: string) => {
+  try {
+    const token = await SecureStore.getItemAsync('accessToken');
+    if (!token) throw new Error('No access token found');
+
+    const response = await fetch(
+      `${API_BASE}/connect/accept/${encodeURIComponent(targetUsername)}`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      return { success: false, error: errorData.detail || 'Failed to accept connection request' };
+    }
+
+    const data = await response.json();
+    return { success: true, data };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+};
+
+// Reject a connection request
+export const rejectConnectionRequest = async (targetUsername: string) => {
+  try {
+    const token = await SecureStore.getItemAsync('accessToken');
+    if (!token) throw new Error('No access token found');
+
+    const response = await fetch(
+      `${API_BASE}/connect/reject/${encodeURIComponent(targetUsername)}`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      return { success: false, error: errorData.detail || 'Failed to reject connection request' };
+    }
+
+    const data = await response.json();
+    return { success: true, data };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+};
+
+// Get outgoing connection requests
+export const getSentConnectionRequests = async () => {
+  try {
+    const token = await SecureStore.getItemAsync('accessToken');
+    if (!token) throw new Error('No access token found');
+
+    const response = await fetch(
+      `${API_BASE}/connect/requests/sent`,
+      {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      return { success: false, error: errorData.detail || 'Failed to get sent connection requests' };
+    }
+
+    const data = await response.json();
+    return { success: true, data };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+};
+
+// Get incoming connection requests
+export const getReceivedConnectionRequests = async () => {
+  try {
+    const token = await SecureStore.getItemAsync('accessToken');
+    if (!token) throw new Error('No access token found');
+
+    const response = await fetch(
+      `${API_BASE}/connect/requests/received`,
+      {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      return { success: false, error: errorData.detail || 'Failed to get received connection requests' };
+    }
+
+    const data = await response.json();
+    return { success: true, data };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+};
+
+// Remove a connection (unconnect) with a user
+export const removeConnection = async (targetUsername: string) => {
+  try {
+    const token = await SecureStore.getItemAsync('accessToken');
+    if (!token) return { success: false, error: 'No access token found' };
+
+    const response = await fetch(
+      `${API_BASE}/unconnect/${encodeURIComponent(targetUsername)}`,
+      {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      return { success: false, error: errorData.message || 'Failed to remove connection' };
+    }
+
+    const data = await response.json();
+    return { success: true, data };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+};
+
+// Get the list of the current followers of the user
+export const getFollowers = async () => {
+  try {
+    const token = await SecureStore.getItemAsync('accessToken');
+    if (!token) return { success: false, error: 'No access token found' };
+
+    const response = await fetch(
+      `${API_BASE}/followers`,
+      {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      return { success: false, error: errorData.message || 'Failed to get followers' };
+    }
+
+    const data = await response.json();
+    return { success: true, data };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+};
+
+// Get the list of users the user is currently following
+export const getFollowing = async () => {
+  try {
+    const token = await SecureStore.getItemAsync('accessToken');
+    if (!token) return { success: false, error: 'No access token found' };
+
+    const response = await fetch(
+      `${API_BASE}/following`,
+      {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      return { success: false, error: errorData.message || 'Failed to get following' };
+    }
+
+    const data = await response.json();
+    return { success: true, data };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+};

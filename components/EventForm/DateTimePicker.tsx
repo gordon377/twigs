@@ -4,12 +4,14 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { colors } from '@/styles/styles';
 import { dateTimeHelpers } from '@/types/events';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { utcToZonedTime } from 'date-fns-tz';
 
 interface EventDateTimePickerProps {
   startDate: string; // ISO 8601 format
   endDate: string;   // ISO 8601 format
   isAllDay: boolean;
   onDateTimeChange: (type: 'start' | 'end', isoString: string) => void;
+  timezone?: string; // <-- Add this prop!
 }
 
 export const EventDateTimePicker: React.FC<EventDateTimePickerProps> = ({
@@ -17,18 +19,18 @@ export const EventDateTimePicker: React.FC<EventDateTimePickerProps> = ({
   endDate,
   isAllDay,
   onDateTimeChange,
+  timezone = Intl.DateTimeFormat().resolvedOptions().timeZone, // default to user tz
 }) => {
   const [showPicker, setShowPicker] = useState<{
     type: 'start' | 'end';
     mode: 'date' | 'time';
   } | null>(null);
 
-  // ✅ Helper to get current Date object from ISO string
+  // Helper to get current Date object from ISO string in correct timezone
   const getDateFromISO = (isoString: string): Date => {
     try {
-      return new Date(isoString);
+      return utcToZonedTime(isoString, timezone);
     } catch (error) {
-      console.error('Error parsing ISO date:', error);
       return new Date();
     }
   };

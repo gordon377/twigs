@@ -11,7 +11,7 @@ import { colors } from '@/styles/styles';
 import { CalendarHeader } from '@/components/Drawer';
 import { CalendarEvent, dateTimeHelpers } from '@/types/events';
 import { useEvents } from '@/hooks/useEvents';
-import { updateEvent as updateEventAPI, deleteEvent as deleteEventAPI, getEvents } from '@/utils/api';
+import { getEventDetails, updateEvent as updateEventAPI, deleteEvent as deleteEventAPI } from '@/utils/api';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { EventForm } from '@/components/EventForm/EventForm';
 
@@ -32,37 +32,43 @@ export default function EventDetailsScreen() {
   const [isUpdating, setIsUpdating] = useState(false);
   const eventFormRef = useRef<any>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [refreshMessage, setRefreshMessage] = useState('');
+  // Removed refreshMessage state, only spinner will show
 
   const event = events.find(e => e.id === eventId);
 
   const handleRefresh = async () => {
     if (isRefreshing || !event) return;
-    
-    setIsRefreshing(true);
-    setRefreshMessage('Syncing events...');
+  setIsRefreshing(true);
 
     try {
-      // ✅ FIXED: Extract dates from ISO format
-      const startDate = dateTimeHelpers.extractDateFromISO(event.startDate);
-      const endDate = dateTimeHelpers.extractDateFromISO(event.endDate);
-
-      console.log('🔄 Refreshing events for date range:', startDate, 'to', endDate);
-
-      const result = await getEvents(startDate, endDate);
-
+      const result = await getEventDetails(event.id);
+      console.log('Fetched event from backend:', result);
       if (result.success) {
-        setRefreshMessage('✅ Events synced successfully!');
-        setTimeout(() => setRefreshMessage(''), 1500);
+        // Map backend participants to invitees and update all event fields
+        // Map backend fields to frontend schema
+        const updatedEvent = {
+          id: String(result.data.event.id),
+          title: result.data.event.name, // backend 'name' -> frontend 'title'
+          startDate: result.data.event.startDate,
+          endDate: result.data.event.endDate,
+          description: result.data.event.description,
+          hexcode: result.data.event.hexcode,
+          timezone: result.data.event.timeZone, // backend 'timeZone' -> frontend 'timezone'
+          location: result.data.event.location,
+          calendar: result.data.event.calendar,
+          calendarId: event.calendarId, // preserve the local calendarId
+          invitees: result.data.participants || [],
+        };
+        const updateResult = await updateEventLocal(event.id, updatedEvent);
+        console.log('Local update result:', updateResult, 'Data used:', updatedEvent);
+        // Log the latest events array from context
+        console.log('Events array after update:', events);
       } else {
-        setRefreshMessage('❌ Sync failed');
-        setTimeout(() => setRefreshMessage(''), 2000);
-        console.error('Failed to sync events:', result.error);
+  console.error('Failed to sync event:', result.error);
       }
     } catch (error) {
       console.error('Error during refresh:', error);
-      setRefreshMessage('❌ Network error');
-      setTimeout(() => setRefreshMessage(''), 2000);
+  // No refresh message
     } finally {
       setIsRefreshing(false);
     }
@@ -309,23 +315,7 @@ export default function EventDetailsScreen() {
         ]}
       />
 
-      {(isRefreshing || refreshMessage) && (
-        <View style={styles.refreshIndicator}>
-          {isRefreshing ? (
-            <View style={styles.refreshContent}>
-              <ActivityIndicator size="small" color={colors.primary} />
-              <Text style={styles.refreshText}>Syncing events...</Text>
-            </View>
-          ) : (
-            <Text style={[
-              styles.refreshText, 
-              { color: refreshMessage.includes('✅') ? colors.success : colors.danger }
-            ]}>
-              {refreshMessage}
-            </Text>
-          )}
-        </View>
-      )}
+
 
       <ScrollView 
         style={styles.content} 

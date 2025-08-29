@@ -14,13 +14,6 @@ import * as ImagePicker from 'expo-image-picker';
 export default function ProfileScreen() {
   const router = useRouter();
   const { profileData, setProfileData, isLoading, setIsLoading } = useProfile();
-  const [modals, setModals] = useState({
-    settings: false,
-    editProfile: false,
-    editGeneral: false,
-    editPersonal: false,
-    editPassword: false,
-  });
 
   // Avatar state
   const [selectedImage, setSelectedImage] = useState<string | undefined>(undefined);

@@ -47,10 +47,23 @@ export default function CreateEventScreen() {
 
       console.log('🎯 Creating event with remote calendar ID:', remoteCalendarId);
 
-      // Prepare API data
+
+      // Helper to ensure ISO datetime string
+      const ensureISODateTime = (dateStr?: string) => {
+        if (!dateStr) return undefined;
+        // If already has 'T', assume it's ISO
+        if (dateStr.includes('T')) return dateStr;
+        // Otherwise, append midnight time in UTC
+        return dateStr + 'T00:00:00.000Z';
+      };
+
+      // Prepare API data, always include invitees (default to empty array), and ensure ISO datetime
       const apiEventData = {
         ...eventData,
         calendarId: remoteCalendarId,
+        invitees: eventData.invitees || [],
+        startDate: ensureISODateTime(eventData.startDate),
+        endDate: ensureISODateTime(eventData.endDate),
       };
 
       // Create via API

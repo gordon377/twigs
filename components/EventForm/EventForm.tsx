@@ -46,33 +46,30 @@ export const EventForm = forwardRef<any, EventFormProps>(({
   // ✅ SIMPLIFIED: Initialize with ISO format
   const [eventData, setEventData] = useState<Partial<CalendarEvent>>(() => {
     const userTimezone = getUserTimezone();
-    // Always treat selectedDate as a date in the user's timezone.
-    // If selectedDate is provided, use it as the base date and default to 09:00-10:00.
-    // If not, use today in user's timezone and current hour.
     let baseDate = selectedDate || dateTimeHelpers.getTodayStringInTimezone(userTimezone);
-    let startHour = 9;
-    let endHour = 10;
 
-    if (!selectedDate) {
-      // No selectedDate: use current hour in user's timezone
-      const now = new Date();
-      const nowInUserTZ = new Date(
-        now.toLocaleString('en-US', { timeZone: userTimezone })
-      );
-      startHour = nowInUserTZ.getHours();
-      endHour = (startHour + 1) % 24;
+    // If editing, use initialData's startDate/endDate
+    if (initialData?.startDate && initialData?.endDate) {
+      return {
+        ...initialData,
+        timezone: initialData.timezone || userTimezone,
+      };
     }
 
-    // Compose local datetime strings
-    const startLocal = `${baseDate}T${String(startHour).padStart(2, '0')}:00:00`;
-    const endLocal = `${baseDate}T${String(endHour).padStart(2, '0')}:00:00`;
+    // Otherwise, use selectedDate and current time rounded
+    const now = new Date();
+    const nowInUserTZ = new Date(now.toLocaleString('en-US', { timeZone: userTimezone }));
+    const startHour = nowInUserTZ.getHours();
+    const startTime = `${String(startHour).padStart(2, '0')}:00:00`;
+    const endHour = (nowInUserTZ.getMinutes() === 0 ? startHour + 1 : startHour + 1) % 24;
+    const endTime = `${String(endHour).padStart(2, '0')}:00:00`;
 
-    // Use zonedTimeToUtc to get correct UTC ISO strings for storage
+    const startLocal = `${baseDate}T${startTime}`;
+    const endLocal = `${baseDate}T${endTime}`;
+
     const defaultStartISO = zonedTimeToUtc(startLocal, userTimezone).toISOString();
     const defaultEndISO = zonedTimeToUtc(endLocal, userTimezone).toISOString();
 
-    // Default calendar selection: first calendar in local db (if available)
-    // Fallback to 'Default' and '1' if not loaded yet
     let defaultCalendarId = '1';
     let defaultCalendarName = 'Default';
     if (Array.isArray(calendars) && calendars.length > 0) {
@@ -90,7 +87,7 @@ export const EventForm = forwardRef<any, EventFormProps>(({
       invitees: [],
       calendar: defaultCalendarName,
       calendarId: defaultCalendarId,
-      ...initialData, // Override with provided data
+      ...initialData, // still allow override
     };
   });
   
@@ -124,22 +121,22 @@ export const EventForm = forwardRef<any, EventFormProps>(({
   // ✅ All-day toggle
   const handleAllDayToggle = () => {
     const userTimezone = eventData.timezone || getUserTimezone();
-    const localDate = baseDateRef.current;
+    const currentStartISO = eventData.startDate || '';
+    const currentEndISO = eventData.endDate || '';
+    const localStartDate = dateTimeHelpers.extractDateFromISO(currentStartISO);
+    const localEndDate = dateTimeHelpers.extractDateFromISO(currentEndISO);
 
     if (isAllDay) {
-      // Switch to timed event
-      const startTime = getRoundedTime();
-      const newStartISO = dateTimeHelpers.createISOString(localDate, startTime, userTimezone);
-      const newEndISO = dateTimeHelpers.createISOString(
-        localDate,
-        `${String((parseInt(startTime.slice(0, 2)) + 1) % 24).padStart(2, '0')}:00:00`,
-        userTimezone
-      );
+      // Switch to timed event: use current date and the time that was previously selected (if any), else default to now
+      const prevStartTime = dateTimeHelpers.extractTimeFromISO(currentStartISO) || '09:00:00';
+      const prevEndTime = dateTimeHelpers.extractTimeFromISO(currentEndISO) || '10:00:00';
+      const newStartISO = dateTimeHelpers.createISOString(localStartDate, prevStartTime, userTimezone);
+      const newEndISO = dateTimeHelpers.createISOString(localEndDate, prevEndTime, userTimezone);
       updateEventData('startDate', newStartISO);
       updateEventData('endDate', newEndISO);
     } else {
-      // Switch to all-day event
-      const { start, end } = dateTimeHelpers.createAllDayEventISO(localDate);
+      // Switch to all-day event: use current selected dates, but set times to 00:00:00 and 23:59:59
+      const { start, end } = dateTimeHelpers.createAllDayEventISO(localStartDate, userTimezone);
       updateEventData('startDate', start);
       updateEventData('endDate', end);
     }
@@ -238,6 +235,7 @@ export const EventForm = forwardRef<any, EventFormProps>(({
             endDate={eventData.endDate || ''}
             isAllDay={isAllDay}
             onDateTimeChange={handleDateTimeChange}
+            timezone={eventData.timezone || getUserTimezone()} // <-- Pass timezone!
           />
         </FormCard>
 
