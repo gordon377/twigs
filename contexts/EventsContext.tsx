@@ -271,10 +271,19 @@ export function EventsProvider({ children }: { children: ReactNode }) {
 
       console.log('📥 API calendars received:', apiCalendars.length);
 
+      // Build a set of remote IDs from the API response
+      const remoteIds = new Set(apiCalendars.map((cal: any) => cal.id));
+
       await db.withTransactionAsync(async () => {
+        // Remove any local calendars not present in the API response
+        await db.runAsync(
+          `DELETE FROM calendars WHERE remoteId IS NOT NULL AND remoteId NOT IN (${[...remoteIds].map(() => '?').join(',')})`,
+          Array.from(remoteIds) as string[]
+        );
+
+        // Add or update calendars from the API response
         for (const apiCalendar of apiCalendars) {
           try {
-            // ✅ FIXED: Validate required fields before processing
             if (!apiCalendar.name || !apiCalendar.id) {
               console.warn('Skipping calendar with missing required fields:', apiCalendar);
               continue;
@@ -540,88 +549,59 @@ export function EventsProvider({ children }: { children: ReactNode }) {
   // Calendar CRUD (unchanged)
   const addCalendar = useCallback(async (calendar: Omit<Calendar, 'id'>): Promise<Calendar | null> => {
     try {
-      console.log('📝 Creating calendar:', calendar.name);
-      
-      const apiResponse = await createCalendarAPI({
+      console.log('📝 Creating calendar locally:', calendar.name);
+      const localId = `cal-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      await db.runAsync(
+        'INSERT INTO calendars (id, remoteId, name, hexcode) VALUES (?, ?, ?, ?)',
+        [localId, null, calendar.name, calendar.hexcode]
+      );
+      await loadCalendarsFromDB();
+      const newCalendar: Calendar = {
+        id: localId,
+        remoteId: undefined,
         name: calendar.name,
-        hexcode: calendar.hexcode,
-        is_private: false
-      });
-
-      if (apiResponse.success) {
-        const apiCalendar = apiResponse.data.data || apiResponse.data;
-        
-        const localId = `cal-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        await db.runAsync(
-          'INSERT INTO calendars (id, remoteId, name, hexcode) VALUES (?, ?, ?, ?)',
-          [localId, apiCalendar.id, apiCalendar.name, apiCalendar.hexcode]
-        );
-        
-        await loadCalendarsFromDB();
-        
-        const newCalendar: Calendar = {
-          id: localId,
-          remoteId: apiCalendar.id,
-          name: apiCalendar.name,
-          hexcode: apiCalendar.hexcode
-        };
-        
-        console.log('✅ Calendar created successfully:', newCalendar.name);
-        return newCalendar;
-      } else {
-        console.error('API calendar creation failed:', apiResponse.error);
-        return null;
-      }
+        hexcode: calendar.hexcode
+      };
+      console.log('✅ Calendar created locally:', newCalendar.name);
+      return newCalendar;
     } catch (error) {
-      console.error('Failed to add calendar:', error);
+      console.error('Failed to add calendar locally:', error);
       return null;
     }
   }, []);
 
   const updateCalendar = useCallback(async (calendarId: string, updates: Partial<Calendar>): Promise<boolean> => {
     try {
-      console.log('📝 Updating calendar:', calendarId);
+      console.log('📝 Updating calendar locally:', calendarId);
       
       const currentCalendar = calendars.find(cal => cal.id === calendarId);
       if (!currentCalendar?.remoteId) {
         console.error('Cannot update calendar: no remote ID found');
         return false;
       }
-
-      const apiResponse = await updateCalendarAPI({
-        calendarId: currentCalendar.remoteId,
-        name: updates.name || currentCalendar.name,
-        hexcode: updates.hexcode || currentCalendar.hexcode,
-        is_private: false
-      });
-
-      if (apiResponse.success) {
-        const setParts = [];
-        const values = [];
-        
-        if (updates.name !== undefined) {
-          setParts.push('name = ?');
-          values.push(updates.name);
-        }
-        if (updates.hexcode !== undefined) {
-          setParts.push('hexcode = ?');
-          values.push(updates.hexcode);
-        }
-        
-        values.push(calendarId);
-        
-        await db.runAsync(
-          `UPDATE calendars SET ${setParts.join(', ')} WHERE id = ?`,
-          values
-        );
-        
-        await loadCalendarsFromDB();
-        console.log('✅ Calendar updated successfully');
-        return true;
-      } else {
-        console.error('API calendar update failed:', apiResponse.error);
-        return false;
+      const setParts = [];
+      const values = [];
+      
+      if (updates.name !== undefined) {
+        setParts.push('name = ?');
+        values.push(updates.name);
       }
+      if (updates.hexcode !== undefined) {
+        setParts.push('hexcode = ?');
+        values.push(updates.hexcode);
+      }
+      
+      values.push(calendarId);
+      
+      await db.runAsync(
+        `UPDATE calendars SET ${setParts.join(', ')} WHERE id = ?`,
+        values
+      );
+      
+      await loadCalendarsFromDB();
+      console.log('✅ Calendar updated locally');
+      return true;
+      
     } catch (error) {
       console.error('Failed to update calendar:', error);
       return false;
@@ -648,21 +628,17 @@ export function EventsProvider({ children }: { children: ReactNode }) {
         return false;
       }
 
-      const apiResponse = await deleteCalendarAPI({
-        calendarId: currentCalendar.remoteId
-      });
-
-      if (apiResponse.success) {
+      try{
         await db.runAsync('DELETE FROM calendars WHERE id = ?', [calendarId]);
         await loadCalendarsFromDB();
         console.log('✅ Calendar deleted successfully');
         return true;
-      } else {
-        console.error('API calendar deletion failed:', apiResponse.error);
+      } catch (dbError) {
+        console.error('Failed to delete calendar locally:', dbError);
         return false;
       }
     } catch (error) {
-      console.error('Failed to delete calendar:', error);
+      console.error('Failed to delete calendar locally:', error);
       return false;
     }
   }, [calendars]);

@@ -86,23 +86,9 @@ export default function ManageCalendarsScreen() {
               const apiResponse = await createCalendarAPI(apiCalendarData);
               
               if (apiResponse.success) {
-                const createdCalendar = apiResponse.data.data || apiResponse.data;
-                
-                // ✅ FIXED: Create local calendar object (without id, let addCalendar generate it)
-                const localCalendarData: Omit<Calendar, 'id'> = {
-                  remoteId: createdCalendar.id,
-                  name: createdCalendar.name,
-                  hexcode: createdCalendar.hexcode,
-                  is_private: createdCalendar.is_private || false
-                };
-
-                const localCalendar = await addCalendar(localCalendarData);
-
-                if (localCalendar) {
-                  Alert.alert('Success', 'Calendar created successfully!');
-                } else {
-                  Alert.alert('Warning', 'Calendar created on server but failed to save locally');
-                }
+                // After successful API creation, sync calendars from server to avoid duplicates
+                await syncCalendarsWithAPI();
+                Alert.alert('Success', 'Calendar created and synced!');
               } else {
                 Alert.alert('Error', apiResponse.error || 'Failed to create calendar');
               }
@@ -151,14 +137,9 @@ export default function ManageCalendarsScreen() {
                 }
               }
 
-              // Update locally
-              const success = await updateCalendar(calendar.id, { name: newName.trim() });
-              
-              if (success) {
-                Alert.alert('Success', 'Calendar updated successfully!');
-              } else {
-                Alert.alert('Error', 'Failed to update calendar locally');
-              }
+              // After successful API update, sync calendars from server
+              await syncCalendarsWithAPI();
+              Alert.alert('Success', 'Calendar updated and synced!');
             } catch (error) {
               console.error('Failed to update calendar:', error);
               Alert.alert('Error', 'Failed to update calendar. Please try again.');
@@ -172,6 +153,11 @@ export default function ManageCalendarsScreen() {
   };
 
   const handleDeleteCalendar = (calendar: Calendar) => {
+    // Prevent deleting the first calendar in the list
+    if (calendars.length > 0 && calendars[0].id === calendar.id) {
+      Alert.alert('Not Allowed', 'The first calendar cannot be deleted for safety reasons.');
+      return;
+    }
     Alert.alert(
       'Delete Calendar',
       `Are you sure you want to delete "${calendar.name}"? This will also delete all events in this calendar.`,
@@ -196,14 +182,9 @@ export default function ManageCalendarsScreen() {
                 }
               }
 
-              // Delete locally
-              const success = await deleteCalendar(calendar.id);
-              
-              if (success) {
-                Alert.alert('Success', 'Calendar deleted successfully!');
-              } else {
-                Alert.alert('Error', 'Failed to delete calendar locally');
-              }
+              // After successful API delete, sync calendars from server
+              await syncCalendarsWithAPI();
+              Alert.alert('Success', 'Calendar deleted and synced!');
             } catch (error) {
               console.error('Failed to delete calendar:', error);
               Alert.alert('Error', 'Failed to delete calendar. Please try again.');
@@ -238,30 +219,20 @@ export default function ManageCalendarsScreen() {
           onPress: async () => {
             try {
               const remoteId = getRemoteCalendarId(calendar.id);
-              
               if (remoteId) {
-                // ✅ FIXED: Use single object parameter
                 const apiResponse = await updateCalendarAPI({
                   calendarId: remoteId,
                   name: calendar.name,
                   hexcode: color.value,
                   is_private: calendar.is_private || false
                 });
-
                 if (!apiResponse.success) {
                   Alert.alert('Error', apiResponse.error || 'Failed to update calendar color on server');
                   return;
                 }
               }
-
-              // Update locally
-              const success = await updateCalendar(calendar.id, { hexcode: color.value });
-              
-              if (success) {
-                Alert.alert('Success', 'Calendar color updated successfully!');
-              } else {
-                Alert.alert('Error', 'Failed to update calendar color locally');
-              }
+              await syncCalendarsWithAPI();
+              Alert.alert('Success', 'Calendar color updated and synced!');
             } catch (error) {
               console.error('Failed to update calendar color:', error);
               Alert.alert('Error', 'Failed to update calendar color. Please try again.');
@@ -284,30 +255,20 @@ export default function ManageCalendarsScreen() {
             try {
               const remoteId = getRemoteCalendarId(calendar.id);
               const newPrivacyState = !calendar.is_private;
-              
               if (remoteId) {
-                // Update on server
                 const apiResponse = await updateCalendarAPI({
                   calendarId: remoteId,
                   name: calendar.name,
                   hexcode: calendar.hexcode,
                   is_private: newPrivacyState
                 });
-
                 if (!apiResponse.success) {
                   Alert.alert('Error', apiResponse.error || 'Failed to update calendar privacy on server');
                   return;
                 }
               }
-
-              // Update locally
-              const success = await updateCalendar(calendar.id, { is_private: newPrivacyState });
-              
-              if (success) {
-                Alert.alert('Success', `Calendar is now ${newPrivacyState ? 'private' : 'public'}!`);
-              } else {
-                Alert.alert('Error', 'Failed to update calendar privacy locally');
-              }
+              await syncCalendarsWithAPI();
+              Alert.alert('Success', `Calendar privacy updated and synced!`);
             } catch (error) {
               console.error('Failed to update calendar privacy:', error);
               Alert.alert('Error', 'Failed to update calendar privacy. Please try again.');
@@ -405,7 +366,7 @@ export default function ManageCalendarsScreen() {
                       )}
                     </View>
                     <Text style={styles.calendarMeta}>
-                      {calendar.remoteId ? `Synced • ID: ${calendar.remoteId}` : 'Local only'}
+                      {calendar.remoteId ? `Synced` : 'Local only'}
                     </Text>
                   </View>
                 </View>

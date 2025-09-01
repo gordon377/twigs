@@ -158,6 +158,7 @@ export const logIn = async (
   }
 };
 
+// signUp
 export const signUp = async (
   setIsLoggingIn: (loading: boolean) => void,
   setIsSigningUp: (loading: boolean) => void,
@@ -230,7 +231,36 @@ export const signUp = async (
       alert("Sign-Up failed, try again");
     })
     .finally(cleanUp);
-   };
+};
+
+// Delete the current user's account
+export const deleteAccount = async () => {
+  try {
+    const token = await SecureStore.getItemAsync('accessToken');
+    if (!token) return { success: false, error: 'No access token found' };
+
+    const response = await fetch(
+      `${API_BASE}/delete-account`,
+      {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      return { success: false, error: errorData.detail || 'Failed to delete account' };
+    }
+
+    const data = await response.json();
+    return { success: true, data };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+};
 
 
 {/* Profile Management Routes */}
@@ -1196,6 +1226,42 @@ export const getFollowing = async () => {
     if (!response.ok) {
       const errorData = await response.json();
       return { success: false, error: errorData.message || 'Failed to get following' };
+    }
+
+    const data = await response.json();
+    return { success: true, data };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+};
+
+{/* User to User Interaction Routes */}
+
+// Search for profiles by user_id, display_name, or username
+export const searchProfiles = async (searchParams: {
+  user_id?: string;
+  display_name?: string;
+  username?: string;
+}) => {
+  try {
+    const token = await SecureStore.getItemAsync('accessToken');
+    if (!token) return { success: false, error: 'No access token found' };
+
+    const response = await fetch(
+      `${API_BASE}/profile/search`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(searchParams)
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      return { success: false, error: errorData.detail || 'Failed to search profiles' };
     }
 
     const data = await response.json();
