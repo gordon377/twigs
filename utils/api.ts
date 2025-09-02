@@ -1243,6 +1243,7 @@ export const searchProfiles = async (searchParams: {
   display_name?: string;
   username?: string;
 }) => {
+  console.log('searchProfiles called with:', searchParams);
   try {
     const token = await SecureStore.getItemAsync('accessToken');
     if (!token) return { success: false, error: 'No access token found' };
@@ -1265,6 +1266,7 @@ export const searchProfiles = async (searchParams: {
     }
 
     const data = await response.json();
+    console.log('searchProfiles response data:', data);
     return { success: true, data };
   } catch (error: any) {
     return { success: false, error: error.message };
