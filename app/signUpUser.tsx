@@ -12,12 +12,9 @@ import { logIn, signUp } from '@/utils/api';
 import { Ionicons } from '@expo/vector-icons';
 import LeafTwig from '@/assets/appIcons/leafTwig.svg';
 
-const axios = require('axios').default;
-
 export default function ProfileScreen() {
   const router = useRouter();
   const { setProfileData, setIsLoading } = useProfile();
-  const insets = useSafeAreaInsets();
   const [errors, setErrors] = useState<string[]>([]);
   const { email, password } = useLocalSearchParams();
 
@@ -31,20 +28,6 @@ export default function ProfileScreen() {
   const [bio, setBio] = useState('');
   const [isSigningUp, setIsSigningUp] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
-
-  //TO-DO: Add API Integration for generating a default avatar and uploading once backend is ready
-
-  // Generate a random color for the avatar
-  const getRandomColor = () => {
-    const colors = [
-      '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7',
-      '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E9',
-      '#F8C471', '#82E0AA', '#F1948A', '#85C1E9', '#D7BDE2'
-    ];
-    return colors[Math.floor(Math.random() * colors.length)];
-  };
-
-  const [avatarColor] = useState(getRandomColor());
 
 
   const handleSignUp = async () => {

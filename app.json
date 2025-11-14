@@ -7,12 +7,14 @@
     "icon": "./assets/images/icon.png",
     "scheme": "twigsApp",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.twigsocial.twigs",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSCameraUsageDescription": "This app uses the camera to let you take profile pictures.",
+        "NSPhotoLibraryUsageDescription": "This app needs access to your photo library to select profile pictures."
       },
       "icon": {
         "dark": "./assets/icons/ios-dark.png",
@@ -27,7 +29,12 @@
         "monochromeImage": "./assets/icons/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.twigsocial.twigs"
+      "package": "com.twigsocial.twigs",
+      "permissions": [
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "CAMERA"
+      ]
     },
     "web": {
       "bundler": "metro",

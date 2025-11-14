@@ -136,7 +136,7 @@ export default function DiscoverScreen() {
               />
             </View>
             <Text style={styles.searchHint}>
-              Use @ to search by username handle or without it to search by display name.
+              Searches must be exact. Use @ to search by username handle or without it to search by display name.
             </Text>
           </View>
           {/* Search results below search bar */}

@@ -14,6 +14,7 @@ export default function SearchProfileScreen() {
       bio={typeof params.bio === 'string' ? params.bio : undefined}
       email={typeof params.email === 'string' ? params.email : undefined}
       avatarUrl={typeof params.avatarUrl === 'string' ? params.avatarUrl : undefined}
+      userId= {typeof params.id === 'string' ? params.id : undefined}
       onClose={() => router.back()}
     />
   );

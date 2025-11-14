@@ -1,8 +1,15 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { getConnections } from '@/utils/api';
 
-interface ConnectionData {
-  [key: string]: any;
+// Explicitly define the connection data structure
+export interface ConnectionData {
+  uuid: string;
+  email: string;
+  phoneNumber: string;
+  displayName: string;
+  username: string;
+  bio: string;
+  avatarImage: string; // URL or base64 string
 }
 
 interface ConnectionsContextType {
@@ -31,12 +38,19 @@ export function ConnectionsProvider({ children }: { children: ReactNode }) {
   const refreshConnections = async () => {
     try {
       setError(null);
-      const connectionsData = await getConnections(setConnections, setIsLoadingConnections); // ✅ Updated function name
-      
-      if (connectionsData) {
-        // Handle the API response structure
-        // Adjust based on your actual API response format
-        setConnections(connectionsData);
+      const connectionsData = await getConnections();
+      if (connectionsData && Array.isArray(connectionsData)) {
+        // Map/validate each connection to ensure it matches ConnectionData
+        const formattedConnections = connectionsData.map((conn: any) => ({
+          uuid: conn.uuid,
+          email: conn.email,
+          phoneNumber: conn.phoneNumber,
+          displayName: conn.displayName,
+          username: conn.username,
+          bio: conn.bio,
+          avatarImage: conn.avatarImage,
+        }));
+        setConnections(formattedConnections);
       }
     } catch (err: any) {
       console.error('Error fetching connections:', err);
@@ -68,4 +82,4 @@ export function useConnections() {
 }
 
 // ✅ Export types for use in components
-export type { ConnectionData, ConnectionsContextType };
+export type { ConnectionsContextType };

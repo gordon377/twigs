@@ -1,6 +1,7 @@
-import React from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, Image, TouchableOpacity, Button, Alert, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { sendConnectionRequest } from '@/utils/api';
 
 export type BigProfileProps = {
   username?: string;
@@ -8,10 +9,36 @@ export type BigProfileProps = {
   bio?: string;
   email?: string;
   avatarUrl?: string;
+  userId?: string; // <-- Add userId prop for connection
   onClose?: () => void;
 };
 
-const BigProfile: React.FC<BigProfileProps> = ({ username, displayName, bio, email, avatarUrl, onClose }) => {
+const BigProfile: React.FC<BigProfileProps> = ({
+  username,
+  displayName,
+  bio,
+  email,
+  avatarUrl,
+  userId,
+  onClose
+}) => {
+  const [loading, setLoading] = useState(false);
+
+  const handleConnect = async () => {
+    if (!userId) {
+      Alert.alert('Error', 'User ID is missing.');
+      return;
+    }
+    setLoading(true);
+    const result = await sendConnectionRequest(userId);
+    setLoading(false);
+    if (result.success) {
+      Alert.alert('Success', 'Connection request sent!');
+    } else {
+      Alert.alert('Error', result.error || 'Failed to send connection request');
+    }
+  };
+
   return (
     <View style={styles.overlay}>
       <View style={styles.container}>
@@ -37,6 +64,20 @@ const BigProfile: React.FC<BigProfileProps> = ({ username, displayName, bio, ema
         <View style={styles.infoContainer}>
           <Text style={styles.infoLabel}>Bio</Text>
           <Text style={styles.infoText}>{bio || 'No bio provided.'}</Text>
+        </View>
+        {/* Connection Request Button */}
+        <View style={styles.buttonContainer}>
+          <TouchableOpacity
+            style={styles.connectButton}
+            onPress={handleConnect}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.connectButtonText}>Send Connection Request</Text>
+            )}
+          </TouchableOpacity>
         </View>
       </View>
     </View>
@@ -122,6 +163,24 @@ const styles = StyleSheet.create({
   infoText: {
     color: '#25292e',
     fontSize: 15,
+  },
+  buttonContainer: {
+    marginTop: 16,
+    width: '100%',
+    alignItems: 'center',
+  },
+  connectButton: {
+    backgroundColor: '#585ABF',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    alignItems: 'center',
+    width: '100%',
+  },
+  connectButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });
 

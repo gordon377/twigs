@@ -6,7 +6,8 @@ import { Alert } from 'react-native';
 import { CalendarEvent, dateTimeHelpers } from '@/types/events';
 import { colors } from '@/styles/styles';
 
-const API_BASE = 'https://twig-production.up.railway.app';
+const API_BASE_MAIN = 'https://twig-production.up.railway.app';
+const API_BASE = 'http://twig-test.up.railway.app'; // Test server (currently in use)
 
 {/* Profile/User Management */}
 
@@ -265,10 +266,11 @@ export const deleteAccount = async () => {
 
 {/* Profile Management Routes */}
 
-// updateProfile
+// updateProfile (Get User Profile Data)
 export const updateProfile = async (
   setProfileData?: (data: any) => void,
-  setIsLoading?: (loading: boolean) => void
+  setIsLoading?: (loading: boolean) => void,
+  setProfilePicture?: (blob: Blob | null) => void
 ) => {
   console.log('updateProfile called');
 
@@ -289,7 +291,7 @@ export const updateProfile = async (
 
     console.log('Making API call...');
     const response = await axios.post(
-      'https://twig-production.up.railway.app/profile',
+      `${API_BASE}/profile`,
       { refreshToken: refreshToken },
       {
         headers: {
@@ -303,6 +305,21 @@ export const updateProfile = async (
 
     if (setProfileData) setProfileData(response.data);
 
+    // Download profile picture as blob and save to context
+    if (setProfilePicture && response.data?.profile_link) {
+      try {
+        const imgResp = await fetch(response.data.profile_link);
+        if (imgResp.ok) {
+          const blob = await imgResp.blob();
+          setProfilePicture(blob);
+        } else {
+          setProfilePicture(null);
+        }
+      } catch (err) {
+        setProfilePicture(null);
+      }
+    }
+
     return response.data;
   } catch (error: any) {
     console.log('Error in updateProfile:', error);
@@ -314,6 +331,103 @@ export const updateProfile = async (
     throw error;
   } finally {
     if (setIsLoading) setIsLoading(false);
+  }
+};
+
+// POST /profile/picture - Upload profile picture
+export const uploadProfilePicture = async (formData: FormData, refreshToken: string) => {
+  console.log('uploadProfilePicture called');
+  try {
+    const token = await SecureStore.getItemAsync('accessToken');
+    if (!token) throw new Error('No access token found');
+
+    formData.append('refreshToken', refreshToken);
+
+    const response = await fetch(`${API_BASE}/profile/picture`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        // Do NOT set Content-Type here; let fetch set it automatically for FormData
+      },
+      body: formData,
+    });
+
+    const data = await response.json();
+    if (!response.ok) throw new Error(`Failed to upload profile picture: ${data.detail || response.statusText}`);
+    console.log('Upload response data:', data);
+    return { success: true, data };
+  } catch (error: any) {
+    console.log('Error in uploadProfilePicture:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// GET /profile/picture - Retrieve profile picture
+export const getProfilePicture = async (refreshToken: string, setProfilePicture?: (blob: Blob | null) => void) => {
+  console.log('getProfilePicture called');
+  try {
+    const token = await SecureStore.getItemAsync('accessToken');
+    if (!token) throw new Error('No access token found');
+
+    const response = await fetch(`${API_BASE}/profile/get/picture`, {
+      method: 'POST', //Temp Post for now
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ refreshToken })
+    });
+
+    if (response.ok) {
+      console.log(`Response: ${response}`); // Log the status code
+    }
+      const data = await response.json();
+    if (!response.ok) throw new Error(`Failed to get profile picture: ${data.detail || response.statusText}`);
+    console.log('Profile picture data:', data);
+
+    // Download image as blob and save to context
+    if (setProfilePicture && data?.data?.signed_url) {
+      try {
+        const imgResp = await fetch(data.data.signed_url);
+        if (imgResp.ok) {
+          const blob = await imgResp.blob();
+          setProfilePicture(blob);
+        } else {
+          setProfilePicture(null);
+        }
+      } catch (err) {
+        setProfilePicture(null);
+      }
+    }
+
+    return { success: true, data };
+  } catch (error: any) {
+    console.log('Error in getProfilePicture:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// DELETE /profile/picture - Delete profile picture
+export const deleteProfilePicture = async (refreshToken: string) => {
+  console.log('deleteProfilePicture called');
+  try {
+    const token = await SecureStore.getItemAsync('accessToken');
+    if (!token) throw new Error('No access token found');
+
+    const response = await fetch(`${API_BASE}/profile/picture`, {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ refreshToken }),
+    });
+
+    if (!response.ok) throw new Error('Failed to delete profile picture');
+    const data = await response.json();
+    return { success: true, data };
+  } catch (error: any) {
+    return { success: false, error: error.message };
   }
 };
 
@@ -349,7 +463,7 @@ export const changeUserInfo = async (
 
     console.log('Making API call...');
     const response = await axios.patch(
-      'https://twig-production.up.railway.app/change-profile',
+      `${API_BASE}/change-profile`,
       {
         refreshToken: refreshToken,
         username: editUserInfoFields.username,
@@ -420,7 +534,7 @@ export const changePassword = async (
 
     console.log('Making API call...');
     const response = await axios.patch(
-      'https://twig-production.up.railway.app/change-password',
+      `${API_BASE}/change-password`,
       {
         refreshToken: refreshToken,
         newPassword: newPassword,
@@ -489,7 +603,7 @@ export const changeEmail = async (
 
     console.log('Making API call...');
     const response = await axios.patch(
-      'https://twig-production.up.railway.app/change-email',
+      `${API_BASE}/change-email`,
       {
         refreshToken: refreshToken,
         newEmail: newEmail,
@@ -526,7 +640,7 @@ export const changeEmail = async (
 
 {/* Calendar Management/CRUD Routes */}
 
-//Create Calendar
+// Create Calendar
 export const createCalendar = async (calendarData: any) => {
   console.log('createCalendar called');
 
@@ -540,7 +654,7 @@ export const createCalendar = async (calendarData: any) => {
 
     console.log('Making API call...');
     const response = await axios.post(
-      'https://twig-production.up.railway.app/calendar',
+      `${API_BASE}/calendar`,
       { 
         name: calendarData.name,
         hexcode: calendarData.hexcode,
@@ -566,7 +680,7 @@ export const createCalendar = async (calendarData: any) => {
   }
 };
 
-//Get Calendars
+// Get Calendars
 export const getCalendars = async () => {
   console.log('getCalendars called');
 
@@ -580,7 +694,7 @@ export const getCalendars = async () => {
 
     console.log('Making API call...');
     const response = await axios.get(
-      'https://twig-production.up.railway.app/calendar',
+      `${API_BASE}/calendar`,
       {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -601,7 +715,7 @@ export const getCalendars = async () => {
   }
 };
 
-//Update Calendar
+// Update Calendar
 export const updateCalendar = async (calendarData: any) => {
   console.log('updateCalendar called');
 
@@ -615,7 +729,7 @@ export const updateCalendar = async (calendarData: any) => {
 
     console.log('Making API call...');
     const response = await axios.put(
-      `https://twig-production.up.railway.app/calendar/${calendarData.calendarId}`,
+      `${API_BASE}/calendar/${calendarData.calendarId}`,
       { 
         name: calendarData.name,
         hexcode: calendarData.hexcode,
@@ -656,7 +770,7 @@ export const deleteCalendar = async (calendarData: any) => {
 
     console.log('Making API call...');
     const response = await axios.delete(
-      `https://twig-production.up.railway.app/calendar/${calendarData.calendarId}`,
+      `${API_BASE}/calendar/${calendarData.calendarId}`,
       {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -674,6 +788,97 @@ export const deleteCalendar = async (calendarData: any) => {
       success: false, 
       error: error.response?.data?.message || 'Failed to delete calendar' 
     };
+  }
+};
+
+{/* Shared Calendar Routes */}
+
+// Invite User to Calendar
+export const inviteToCalendar = async (calendarId: string, targetUserId: string[], role: string[]) => {
+  try {
+    const token = await SecureStore.getItemAsync('accessToken');
+    if (!token) throw new Error('No access token found');
+
+    const response = await fetch(`${API_BASE}/calendar/invite`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        calendarId,
+        targetUserId,
+        role,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || 'Failed to send calendar invites');
+    }
+
+    const data = await response.json();
+    return { success: true, data };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+};
+
+// GET Calendar Shares (Shared Calendars)
+export const getCalendarShares = async (calendarId: string) => {
+  try {
+    const token = await SecureStore.getItemAsync('accessToken');
+    if (!token) throw new Error('No access token found');
+
+    // CHECKBACK: Is calendarId here supposed to be a query param or in the body?
+    const response = await fetch(`${API_BASE}/calendar/shares?calendarId=${encodeURIComponent(calendarId)}`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || 'Failed to get calendar shares');
+    }
+
+    const data = await response.json();
+    return { success: true, data };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+};
+
+// Update Shared Calendar Access
+export const updateCalendarShares = async (calendarId: string, targetUserId: string[], role: string[]) => {
+  try {
+    const token = await SecureStore.getItemAsync('accessToken');
+    if (!token) throw new Error('No access token found');
+
+    const response = await fetch(`${API_BASE}/calendar/shares`, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        calendarId,
+        targetUserId,
+        role,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || 'Failed to update calendar shares');
+    }
+
+    const data = await response.json();
+    return { success: true, data };
+  } catch (error: any) {
+    return { success: false, error: error.message };
   }
 };
 
@@ -709,7 +914,7 @@ export const createEvent = async (rawEventData: any) => {
 
     console.log('Making API call with corrected ISO format:', cloudEventObject);
     const response = await axios.post(
-      'https://twig-production.up.railway.app/events',
+      `${API_BASE}/events`,
       { event: cloudEventObject, participants: rawEventData.invitees },
       {
         headers: {
@@ -812,7 +1017,7 @@ export const updateEvent = async (rawEventData: any) => {
     }
 
     const response = await axios.put(
-      `https://twig-production.up.railway.app/events/${rawEventData.id}`,
+      `${API_BASE}/events/${rawEventData.id}`,
       {
         name: rawEventData.title,
         startDate: rawEventData.startDate,  // ✅ ISO 8601 format
@@ -856,7 +1061,7 @@ export const deleteEvent = async (eventId: any) => {
 
     console.log('Making API call...');
     const response = await axios.delete(
-      `https://twig-production.up.railway.app/events/${eventId}`,
+      `${API_BASE}/events/${eventId}`,
       {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -884,7 +1089,7 @@ export const deleteEvent = async (eventId: any) => {
 
 {/* Event Interaction Routes */}
 
-// getEventParticipants for a specific event
+// getEventParticipants for a specific event (may not be needed)
 export const getEventParticipants = async (eventId: string) => {
   try {
     const token = await SecureStore.getItemAsync('accessToken');
@@ -1001,16 +1206,114 @@ export const respondToEventInvite = async (eventId: string, statusState: 'accept
   }
 };
 
+{/* Event Proposal Routes */}
+
+// proposalData includes a title, description (explanation), and proposed changes (startDate, endDate, and location)
+
+// Create a proposal for an event
+export const createEventProposal = async (eventId: string, proposalData: any) => {
+  try {
+    const token = await SecureStore.getItemAsync('accessToken');
+    if (!token) throw new Error('No access token found');
+
+    const response = await fetch(`${API_BASE}/events/${eventId}/proposals`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(proposalData),
+    });
+
+    if (!response.ok) throw new Error('Failed to create proposal');
+    const data = await response.json();
+    return { success: true, data };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+};
+
+// Get Proposals for an Event
+export const getEventProposals = async (eventId: string) => {
+  try {
+    const token = await SecureStore.getItemAsync('accessToken');
+    if (!token) throw new Error('No access token found');
+
+    const response = await fetch(`${API_BASE}/events/${eventId}/proposals`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) throw new Error('Failed to get proposals');
+    const data = await response.json();
+    return { success: true, data };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+};
+
+// Delete Proposal
+export const deleteEventProposal = async (eventId: string, proposalId: string) => {
+  try {
+    const token = await SecureStore.getItemAsync('accessToken');
+    if (!token) throw new Error('No access token found');
+
+    const response = await fetch(`${API_BASE}/events/${eventId}/proposals/${proposalId}`, {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) throw new Error('Failed to delete proposal');
+    const data = await response.json();
+    return { success: true, data };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+};
+
+// Respond to proposal
+export const respondToEventProposal = async (
+  eventId: string,
+  proposalId: string,
+  responseData: { status: 'accepted' | 'rejected' | 'pending' }
+) => {
+  try {
+    const token = await SecureStore.getItemAsync('accessToken');
+    if (!token) throw new Error('No access token found');
+
+    const response = await fetch(`${API_BASE}/events/${eventId}/proposals/${proposalId}/respond`, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(responseData),
+    });
+
+    if (!response.ok) throw new Error('Failed to respond to proposal');
+    const data = await response.json();
+    return { success: true, data };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+};
+
 {/* Connection Routes */}
 
 // Accept a connection request
-export const sendConnectionRequest = async (targetUsername: string) => {
+export const sendConnectionRequest = async (targetUserId: string) => {
   try {
     const token = await SecureStore.getItemAsync('accessToken');
     if (!token) throw new Error('No access token found');
 
     const response = await fetch(
-      `${API_BASE}/connect/${encodeURIComponent(targetUsername)}`,
+      `${API_BASE}/connect/request/${encodeURIComponent(targetUserId)}`,
       {
         method: 'POST',
         headers: {
@@ -1177,26 +1480,24 @@ export const removeConnection = async (targetUsername: string) => {
   }
 };
 
-// Get the list of the current followers of the user
-export const getFollowers = async () => {
+// Get all connections for the current user
+export const getConnections = async () => {
+  console.log('getConnections called');
   try {
     const token = await SecureStore.getItemAsync('accessToken');
-    if (!token) return { success: false, error: 'No access token found' };
+    if (!token) throw new Error('No access token found');
 
-    const response = await fetch(
-      `${API_BASE}/followers`,
-      {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      }
-    );
+    const response = await fetch(`${API_BASE}/connections`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
 
     if (!response.ok) {
       const errorData = await response.json();
-      return { success: false, error: errorData.message || 'Failed to get followers' };
+      throw new Error(errorData.message || 'Failed to fetch connections');
     }
 
     const data = await response.json();
@@ -1206,36 +1507,7 @@ export const getFollowers = async () => {
   }
 };
 
-// Get the list of users the user is currently following
-export const getFollowing = async () => {
-  try {
-    const token = await SecureStore.getItemAsync('accessToken');
-    if (!token) return { success: false, error: 'No access token found' };
-
-    const response = await fetch(
-      `${API_BASE}/following`,
-      {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      }
-    );
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      return { success: false, error: errorData.message || 'Failed to get following' };
-    }
-
-    const data = await response.json();
-    return { success: true, data };
-  } catch (error: any) {
-    return { success: false, error: error.message };
-  }
-};
-
-{/* User to User Interaction Routes */}
+{/* Misc./Other User to User Interaction Routes */}
 
 // Search for profiles by user_id, display_name, or username
 export const searchProfiles = async (searchParams: {

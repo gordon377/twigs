@@ -1,5 +1,5 @@
 import { StyleSheet, Text, View, Image, TouchableOpacity, ScrollView, Alert } from 'react-native';
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { ActivityIndicator } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,108 +8,162 @@ import { useProfile } from '@/contexts/ProfileContext';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
+import ViewShot from 'react-native-view-shot';
+import { uploadProfilePicture, getProfilePicture, deleteProfilePicture, changeUserInfo, changePassword, changeEmail } from '@/utils/api';
+import * as SecureStore from 'expo-secure-store';
+import * as FileSystem from 'expo-file-system';
 
-//TO-DO: Add API Integration for pulling and changing avatar once backend is ready
 
 export default function ProfileScreen() {
+  const avatarShotRef = React.useRef<any>(null);
   const router = useRouter();
-  const { profileData, setProfileData, isLoading, setIsLoading } = useProfile();
+  const { profileData, setProfileData, isLoading, setIsLoading, profilePicture, setProfilePicture } = useProfile();
 
   // Avatar state
   const [selectedImage, setSelectedImage] = useState<string | undefined>(undefined);
-
-  // Generate a random color for the avatar
-  const getRandomColor = () => {
+  const [imageError, setImageError] = useState<string | undefined>(undefined);
+  const [avatarColor] = useState(() => {
     const colors = [
       '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7',
       '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E9',
       '#F8C471', '#82E0AA', '#F1948A', '#85C1E9', '#D7BDE2'
     ];
     return colors[Math.floor(Math.random() * colors.length)];
-  };
+  });
 
-  const [avatarColor] = useState(getRandomColor());
-
-  const pickImageAsync = async () => {
+  // Helper to create object URL from blob
+  const getBlobUrl = useCallback((blob: Blob | null) => {
+    if (!blob) return undefined;
     try {
-      // Request permission
+      return URL.createObjectURL(blob);
+    } catch {
+      return undefined;
+    }
+  }, []);
+  const profileBlobUrl = getBlobUrl(profilePicture);
+
+  // Load profile data and picture on mount
+  useEffect(() => {
+    const fetchProfile = async () => {
+      setIsLoading?.(true);
+      try {
+        const refreshToken = await SecureStore.getItemAsync('refreshToken');
+        await getProfilePicture(refreshToken || '', setProfilePicture);
+        await updateProfile(setProfileData, setIsLoading, setProfilePicture);
+      } catch (err) {
+        console.error('Error loading profile:', err);
+      } finally {
+        setIsLoading?.(false);
+      }
+    };
+    fetchProfile();
+  }, [setProfileData, setIsLoading, setProfilePicture, getBlobUrl]);
+
+  // Pick image from library
+  const pickImageAsync = useCallback(async () => {
+    try {
       const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      
-      if (permissionResult.granted === false) {
+      if (permissionResult.status !== 'granted') {
         Alert.alert('Permission Required', 'Permission to access photo library is required!');
         return;
       }
-
-      // Launch image picker
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
+        mediaTypes: "images",
         allowsEditing: true,
-        aspect: [1, 1], // Square aspect ratio for avatar
+        aspect: [1, 1],
         quality: 0.8,
       });
-
-      if (!result.canceled) {
+      if (!result.canceled && result.assets && result.assets[0]?.uri) {
         setSelectedImage(result.assets[0].uri);
+        setImageError(undefined);
+        const refreshToken = await SecureStore.getItemAsync('refreshToken');
+        // Use FormData for upload
+        const formData = new FormData();
+        formData.append('file', {
+          uri: result.assets[0].uri,
+          name: 'profile.jpg',
+          type: 'image/jpeg',
+        } as any);
+        await uploadProfilePicture(formData, refreshToken || '');
+        await getProfilePicture(refreshToken || '', setProfilePicture);
+      } else {
+        setImageError('Invalid image URI');
       }
     } catch (error) {
+      setImageError('Failed to pick image');
       Alert.alert('Error', 'Failed to pick image. Please try again.');
       console.error('Image picker error:', error);
     }
-  };
+  }, [setSelectedImage, setImageError, setProfilePicture]);
 
-  const takePhoto = async () => {
+  // Take photo with camera
+  const takePhoto = useCallback(async () => {
     try {
       const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
-      
-      if (permissionResult.granted === false) {
+      if (permissionResult.status !== 'granted') {
         Alert.alert('Permission Required', 'Permission to access camera is required!');
         return;
       }
-
       const result = await ImagePicker.launchCameraAsync({
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
       });
+      console.log('Camera result:', result); // Debug log
 
-      if (!result.canceled) {
+      if (!result.canceled && result.assets && result.assets[0]?.uri) {
         setSelectedImage(result.assets[0].uri);
+        setImageError(undefined);
+        const refreshToken = await SecureStore.getItemAsync('refreshToken');
+        const asset = result.assets[0];
+        const formData = new FormData();
+        formData.append('file', {
+          uri: asset.uri,
+          name: asset.fileName || 'profile.jpg',
+          type: asset.type || 'image/jpeg',
+        } as any);
+        await uploadProfilePicture(formData, refreshToken || '');
+        await getProfilePicture(refreshToken || '', setProfilePicture);
+      } else {
+        setImageError('Invalid image URI');
+        Alert.alert('Error', 'Invalid image URI returned from camera.');
+        console.error('Camera result error:', result);
       }
     } catch (error) {
+      setImageError('Failed to take photo');
       Alert.alert('Error', 'Failed to take photo. Please try again.');
       console.error('Camera error:', error);
     }
-  };
-
-  const showImageOptions = () => {
+  }, [setSelectedImage, setImageError, setProfilePicture]);
+  // Show image options
+  const showImageOptions = useCallback(() => {
     Alert.alert(
       'Change Profile Picture',
       'Choose an option',
       [
-        {
-          text: 'Take Photo',
-          onPress: takePhoto,
+        { text: 'Take Photo', onPress: takePhoto },
+        { text: 'Choose from Library', onPress: pickImageAsync },
+        { text: 'Delete Profile Picture', onPress: async () => {
+            const refreshToken = await SecureStore.getItemAsync('refreshToken');
+            await deleteProfilePicture(refreshToken || '');
+            setProfilePicture(null);
+            setSelectedImage(undefined);
+          }
         },
-        {
-          text: 'Choose from Library',
-          onPress: pickImageAsync,
-        },
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
+        { text: 'Cancel', style: 'cancel' },
       ],
       { cancelable: true }
     );
-  };
+  }, [takePhoto, pickImageAsync, setProfilePicture]);
 
-  const swipeDown = Gesture.Pan()
-    .onEnd(event => {
-      if (event.translationY > 50) {
-        console.log("Swipe down registered");
-      }
-    });
+  // Swipe down gesture
+  const swipeDown = Gesture.Pan().onEnd(event => {
+    if (event.translationY > 50) {
+      // Could add refresh or navigation logic here
+    }
+  });
 
+  // UI
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
       <GestureDetector gesture={swipeDown}>
@@ -134,20 +188,31 @@ export default function ProfileScreen() {
               activeOpacity={0.8}
             >
               <View style={styles.avatarWrapper}>
-                {selectedImage ? (
-                  <Image 
-                    source={{ uri: selectedImage }}
+                {selectedImage && typeof selectedImage === 'string' && (selectedImage ?? '').trim() !== '' ? (
+                  <Image
+                    source={{ uri: selectedImage as string }}
                     style={styles.avatarImage}
+                    onError={e => {
+                      setImageError('Failed to load selected image');
+                      Alert.alert('Error', 'Failed to load selected image.');
+                    }}
+                  />
+                ) : profileBlobUrl ? (
+                  <Image
+                    source={{ uri: profileBlobUrl }}
+                    style={styles.avatarImage}
+                    onError={e => {
+                      setImageError('Failed to load profile image');
+                      Alert.alert('Error', 'Failed to load profile image.');
+                    }}
                   />
                 ) : (
-                  <View style={[styles.avatar, { backgroundColor: avatarColor }]}>
+                  <View style={[styles.avatar, { backgroundColor: avatarColor }]}> 
                     <Text style={styles.avatarText}>
                       {(profileData?.data?.displayName || 'User').charAt(0).toUpperCase()}
                     </Text>
                   </View>
                 )}
-                
-                {/* Camera overlay icon */}
                 <View style={styles.cameraOverlay}>
                   <Ionicons name="camera" size={18} color="#fff" />
                 </View>
@@ -173,7 +238,104 @@ export default function ProfileScreen() {
             {/* Update Profile Button */}
             <TouchableOpacity
               style={styles.continueButton}
-              onPress={() => updateProfile(setProfileData, setIsLoading)}
+              onPress={() => updateProfile(setProfileData, setIsLoading, setProfilePicture)}
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.continueButtonText}>Update Profile</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </GestureDetector>
+    </SafeAreaView>
+  );
+// ...existing code...
+
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
+      <GestureDetector gesture={swipeDown}>
+        <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
+          {/* Top right settings button */}
+          <View style={styles.headerRow}>
+            <View style={{ flex: 1 }} />
+            <TouchableOpacity
+              style={styles.settingsButton}
+              onPress={() => router.push('/(tabs)/profile/settings' as any)}
+            >
+              <Ionicons name="settings-outline" size={24} color="#585ABF" />
+            </TouchableOpacity>
+          </View>
+
+          {/* Centered profile content */}
+          <View style={styles.centeredContent}>
+            {/* Interactive Avatar */}
+            <TouchableOpacity 
+              style={styles.avatarContainer}
+              onPress={showImageOptions}
+              activeOpacity={0.8}
+            >
+              {/* Removed ViewShot for debugging native crash */}
+              <View style={styles.avatarWrapper}>
+                {selectedImage && typeof selectedImage === 'string' && (selectedImage ?? '').trim() !== '' ? (
+                  <Image
+                    source={{ uri: selectedImage }}
+                    style={styles.avatarImage}
+                    onError={e => {
+                      setImageError('Failed to load selected image');
+                      Alert.alert('Error', 'Failed to load selected image.');
+                      console.error('Image load error:', e.nativeEvent);
+                    }}
+                  />
+                ) : selectedImage ? (
+                  <View style={[styles.avatar, { backgroundColor: '#ff0000' }]}> 
+                    <Text style={styles.avatarText}>Invalid Image URI</Text>
+                  </View>
+                ) : profileBlobUrl ? (
+                  <Image
+                    source={{ uri: profileBlobUrl }}
+                    style={styles.avatarImage}
+                    onError={e => {
+                      setImageError('Failed to load profile image');
+                      Alert.alert('Error', 'Failed to load profile image.');
+                      console.error('Profile image load error:', e.nativeEvent);
+                    }}
+                  />
+                ) : (
+                  <View style={[styles.avatar, { backgroundColor: avatarColor }]}> 
+                    <Text style={styles.avatarText}>
+                      {(profileData?.data?.displayName || 'User').charAt(0).toUpperCase()}
+                    </Text>
+                  </View>
+                )}
+                <View style={styles.cameraOverlay}>
+                  <Ionicons name="camera" size={18} color="#fff" />
+                </View>
+              </View>
+            </TouchableOpacity>
+
+            {/* Name and Email */}
+            <Text style={styles.title}>
+              {profileData?.data?.displayName || 'John Doe'}
+            </Text>
+            <Text style={styles.email}>
+              {profileData?.email || 'johndoe@email.com'}
+            </Text>
+
+            {/* Bio */}
+            <View style={styles.infoContainer}>
+              <Text style={styles.infoLabel}>Bio</Text>
+              <Text style={styles.infoText}>
+                {profileData?.data?.bio || 'This is a placeholder profile.'}
+              </Text>
+            </View>
+
+            {/* Update Profile Button */}
+            <TouchableOpacity
+              style={styles.continueButton}
+              onPress={() => updateProfile(setProfileData, setIsLoading, setProfilePicture)}
               disabled={isLoading}
             >
               {isLoading ? (
