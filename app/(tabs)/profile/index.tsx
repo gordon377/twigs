@@ -11,7 +11,7 @@ import * as ImagePicker from 'expo-image-picker';
 import ViewShot from 'react-native-view-shot';
 import { uploadProfilePicture, getProfilePicture, deleteProfilePicture, changeUserInfo, changePassword, changeEmail } from '@/utils/api';
 import * as SecureStore from 'expo-secure-store';
-import * as FileSystem from 'expo-file-system';
+// FileSystem not used here after refactor
 
 
 export default function ProfileScreen() {
@@ -48,7 +48,6 @@ export default function ProfileScreen() {
       setIsLoading?.(true);
       try {
         const refreshToken = await SecureStore.getItemAsync('refreshToken');
-        await getProfilePicture(refreshToken || '', setProfilePicture);
         await updateProfile(setProfileData, setIsLoading, setProfilePicture);
       } catch (err) {
         console.error('Error loading profile:', err);
@@ -77,15 +76,9 @@ export default function ProfileScreen() {
         setSelectedImage(result.assets[0].uri);
         setImageError(undefined);
         const refreshToken = await SecureStore.getItemAsync('refreshToken');
-        // Use FormData for upload
-        const formData = new FormData();
-        formData.append('file', {
-          uri: result.assets[0].uri,
-          name: 'profile.jpg',
-          type: 'image/jpeg',
-        } as any);
-        await uploadProfilePicture(formData, refreshToken || '');
-        await getProfilePicture(refreshToken || '', setProfilePicture);
+        // Upload by passing the image URI directly (api.uploadProfilePicture resizes to 512x512)
+        await uploadProfilePicture(result.assets[0].uri, refreshToken || '');
+        await getProfilePicture(setProfilePicture);
       } else {
         setImageError('Invalid image URI');
       }
@@ -116,14 +109,9 @@ export default function ProfileScreen() {
         setImageError(undefined);
         const refreshToken = await SecureStore.getItemAsync('refreshToken');
         const asset = result.assets[0];
-        const formData = new FormData();
-        formData.append('file', {
-          uri: asset.uri,
-          name: asset.fileName || 'profile.jpg',
-          type: asset.type || 'image/jpeg',
-        } as any);
-        await uploadProfilePicture(formData, refreshToken || '');
-        await getProfilePicture(refreshToken || '', setProfilePicture);
+        // Upload by passing the image URI directly (api.uploadProfilePicture resizes to 512x512)
+        await uploadProfilePicture(asset.uri, refreshToken || '');
+        await getProfilePicture(setProfilePicture);
       } else {
         setImageError('Invalid image URI');
         Alert.alert('Error', 'Invalid image URI returned from camera.');

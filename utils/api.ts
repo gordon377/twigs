@@ -5,6 +5,8 @@ import { logInParsed, signUpParsed } from '@/schemas/textSchemas';
 import { Alert } from 'react-native';
 import { CalendarEvent, dateTimeHelpers } from '@/types/events';
 import { colors } from '@/styles/styles';
+import * as ImageManipulator from 'expo-image-manipulator';
+import * as FileSystem from 'expo-file-system';
 
 const API_BASE_MAIN = 'https://twig-production.up.railway.app';
 const API_BASE = 'http://twig-test.up.railway.app'; // Test server (currently in use)
@@ -276,6 +278,8 @@ export const updateProfile = async (
 
   if (setIsLoading) setIsLoading(true);
 
+  await getProfilePicture(setProfilePicture);
+
   try {
     const token = await SecureStore.getItemAsync('accessToken');
     const refreshToken = await SecureStore.getItemAsync('refreshToken');
@@ -335,13 +339,32 @@ export const updateProfile = async (
 };
 
 // POST /profile/picture - Upload profile picture
-export const uploadProfilePicture = async (formData: FormData, refreshToken: string) => {
+export const uploadProfilePicture = async (imageUri: string, refreshToken: string) => {
   console.log('uploadProfilePicture called');
   try {
     const token = await SecureStore.getItemAsync('accessToken');
     if (!token) throw new Error('No access token found');
 
+    if (!imageUri) throw new Error('No image URI provided');
+
+    // Resize/normalize the image to 512x512 and compress it
+    const manipulated = await ImageManipulator.manipulateAsync(
+      imageUri,
+      [{ resize: { width: 512, height: 512 } }],
+      { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG }
+    );
+
+    // Build FormData with resized image and refreshToken
+    const formData = new FormData();
     formData.append('refreshToken', refreshToken);
+
+    // In React Native / Expo, append file as an object with uri, name, type
+    // Cast to any to satisfy TypeScript's FormData.append typing for RN
+    formData.append('file', {
+      uri: manipulated.uri,
+      name: 'profile.jpg',
+      type: 'image/jpeg',
+    } as any);
 
     const response = await fetch(`${API_BASE}/profile/picture`, {
       method: 'POST',
@@ -363,19 +386,22 @@ export const uploadProfilePicture = async (formData: FormData, refreshToken: str
 };
 
 // GET /profile/picture - Retrieve profile picture
-export const getProfilePicture = async (refreshToken: string, setProfilePicture?: (blob: Blob | null) => void) => {
+export const getProfilePicture = async (setProfilePicture?: (blob: Blob | null) => void) => {
   console.log('getProfilePicture called');
   try {
-    const token = await SecureStore.getItemAsync('accessToken');
-    if (!token) throw new Error('No access token found');
+    const accessToken = await SecureStore.getItemAsync('accessToken');
+    if (!accessToken) throw new Error('No access token found');
+
+    const refreshToken = await SecureStore.getItemAsync('refreshToken');
+    if (!refreshToken) throw new Error('No refresh token found');
 
     const response = await fetch(`${API_BASE}/profile/get/picture`, {
       method: 'POST', //Temp Post for now
       headers: {
-        Authorization: `Bearer ${token}`,
+        Authorization: `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ refreshToken })
+      body: JSON.stringify(refreshToken)
     });
 
     if (response.ok) {
@@ -420,7 +446,7 @@ export const deleteProfilePicture = async (refreshToken: string) => {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ refreshToken }),
+      body: JSON.stringify(refreshToken),
     });
 
     if (!response.ok) throw new Error('Failed to delete profile picture');
