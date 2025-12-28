@@ -1332,7 +1332,7 @@ export const respondToEventProposal = async (
 
 {/* Connection Routes */}
 
-// Accept a connection request
+// Send a connection request
 export const sendConnectionRequest = async (targetUserId: string) => {
   try {
     const token = await SecureStore.getItemAsync('accessToken');
@@ -1362,13 +1362,13 @@ export const sendConnectionRequest = async (targetUserId: string) => {
 };
 
 // Accept a connection request
-export const acceptConnectionRequest = async (targetUsername: string) => {
+export const acceptConnectionRequest = async (targetUserId: string) => {
   try {
     const token = await SecureStore.getItemAsync('accessToken');
     if (!token) throw new Error('No access token found');
 
     const response = await fetch(
-      `${API_BASE}/connect/accept/${encodeURIComponent(targetUsername)}`,
+      `${API_BASE}/connect/accept/${encodeURIComponent(targetUserId)}`,
       {
         method: 'POST',
         headers: {
@@ -1391,13 +1391,13 @@ export const acceptConnectionRequest = async (targetUsername: string) => {
 };
 
 // Reject a connection request
-export const rejectConnectionRequest = async (targetUsername: string) => {
+export const rejectConnectionRequest = async (targetUserId: string) => {
   try {
     const token = await SecureStore.getItemAsync('accessToken');
     if (!token) throw new Error('No access token found');
 
     const response = await fetch(
-      `${API_BASE}/connect/reject/${encodeURIComponent(targetUsername)}`,
+      `${API_BASE}/connect/reject/${encodeURIComponent(targetUserId)}`,
       {
         method: 'POST',
         headers: {
@@ -1419,72 +1419,14 @@ export const rejectConnectionRequest = async (targetUsername: string) => {
   }
 };
 
-// Get outgoing connection requests
-export const getSentConnectionRequests = async () => {
-  try {
-    const token = await SecureStore.getItemAsync('accessToken');
-    if (!token) throw new Error('No access token found');
-
-    const response = await fetch(
-      `${API_BASE}/connect/requests/sent`,
-      {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      }
-    );
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      return { success: false, error: errorData.detail || 'Failed to get sent connection requests' };
-    }
-
-    const data = await response.json();
-    return { success: true, data };
-  } catch (error: any) {
-    return { success: false, error: error.message };
-  }
-};
-
-// Get incoming connection requests
-export const getReceivedConnectionRequests = async () => {
-  try {
-    const token = await SecureStore.getItemAsync('accessToken');
-    if (!token) throw new Error('No access token found');
-
-    const response = await fetch(
-      `${API_BASE}/connect/requests/received`,
-      {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      }
-    );
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      return { success: false, error: errorData.detail || 'Failed to get received connection requests' };
-    }
-
-    const data = await response.json();
-    return { success: true, data };
-  } catch (error: any) {
-    return { success: false, error: error.message };
-  }
-};
-
 // Remove a connection (unconnect) with a user
-export const removeConnection = async (targetUsername: string) => {
+export const removeConnection = async (targetUserId: string) => {
   try {
     const token = await SecureStore.getItemAsync('accessToken');
     if (!token) return { success: false, error: 'No access token found' };
 
     const response = await fetch(
-      `${API_BASE}/unconnect/${encodeURIComponent(targetUsername)}`,
+      `${API_BASE}/connection/delete/${encodeURIComponent(targetUserId)}`,
       {
         method: 'DELETE',
         headers: {
@@ -1525,6 +1467,7 @@ export const getConnections = async () => {
       const errorData = await response.json();
       throw new Error(errorData.message || 'Failed to fetch connections');
     }
+    console.log('Response Data: ', response);
 
     const data = await response.json();
     return { success: true, data };

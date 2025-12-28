@@ -1,6 +1,5 @@
 import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import fontAwesome from '@expo/vector-icons/FontAwesome';
 import { commonStyles, colors } from '@/styles/styles';
 
 export const DrawerHeader = ({ title, onBack } : {title: string; onBack: () => void }) => (
@@ -12,7 +11,6 @@ export const DrawerHeader = ({ title, onBack } : {title: string; onBack: () => v
       <Ionicons name="arrow-back" size={24} color={colors.offBlack} />
     </TouchableOpacity>
     <Text style={commonStyles.drawerTitle}>{title}</Text>
-    <View style={{ width: 24 }} /> {/* Spacer for alignment */}
   </View>
 );
 
@@ -35,7 +33,7 @@ export const CalendarHeader = ({
         {leftAction.icon}
       </TouchableOpacity>
     ) : (
-      <View style={{ width: 44 }} /> // Placeholder for alignment
+      <View style={{ width: 44 }}>{/* Placeholder for alignment */}</View>
     )}
     {/* Title */}
     <Text style={commonStyles.calendarTitle}>{title}</Text>

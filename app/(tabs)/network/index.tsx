@@ -1,6 +1,9 @@
 import React from 'react';
-import { SafeAreaView, StyleSheet } from 'react-native';
+import { SafeAreaView, StyleSheet, View, TouchableOpacity } from 'react-native';
 import NetworkTree from '../../../components/NetworkTree';
+import { commonStyles } from '@/styles/styles';
+import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 
 const sampleNodes = [
   { id: '1', name: 'Alice' },
@@ -23,13 +26,29 @@ const sampleLinks = [
 ];
 
 export default function NetworkScreen() {
+  const router = useRouter();
+
   return (
     <SafeAreaView style={styles.safe}>
       <NetworkTree nodes={sampleNodes} links={sampleLinks} />
+      <View style={styles.fabContainer}>
+        <TouchableOpacity
+          style={commonStyles.circularButton}
+          onPress={() => router.push('/(tabs)/network/connections' as any)}
+        >
+          <Ionicons name="person" size={24} color="#585ABF" />
+        </TouchableOpacity>
+      </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#fff' },
+  fabContainer: {
+    position: 'absolute',
+    bottom: 32,
+    right: 24,
+    zIndex: 20,
+  },
 });

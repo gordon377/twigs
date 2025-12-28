@@ -99,15 +99,19 @@ export const commonStyles = StyleSheet.create({
     backgroundColor: colors.background,
     paddingHorizontal: SIZES.spacing.xxl,
   },
-  button: {
+  headerRow: {
+    flexDirection: 'row',
     width: '100%',
-    backgroundColor: colors.black,
-    borderRadius: SIZES.spacing.sm,
-    paddingVertical: 14,
+    justifyContent: 'flex-end',
+    marginBottom: 8,
+  },
+  circularButton: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: '#f5f5f5',
     alignItems: 'center',
-    marginVertical: SIZES.spacing.sm,
-    minHeight: SIZES.button,
     justifyContent: 'center',
+    elevation: 2,
   },
   buttonText: {
     color: colors.white,

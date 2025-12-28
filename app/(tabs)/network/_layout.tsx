@@ -1,10 +1,15 @@
 import { Stack } from 'expo-router';
-import React from 'react';
 
-export default function DiscoverLayout() {
+export default function NetworkLayout() {
   return (
-    <Stack>
-      <Stack.Screen name="index" options={{ title: 'Discover', headerShown: false }} />
+    <Stack
+      screenOptions={{
+        headerShown: false, // Show header for all profile screens
+        headerStyle: { backgroundColor: '#25292e' },
+        headerTintColor: '#fff',
+        animation: 'slide_from_right', // iOS-style stack animation
+      }}
+    >
     </Stack>
   );
 }

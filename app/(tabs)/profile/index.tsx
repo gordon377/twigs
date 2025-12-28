@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View, Image, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import { StyleSheet, Text, View, Image, TouchableOpacity, ScrollView, Alert, RefreshControl } from 'react-native';
 import React, { useState, useEffect, useCallback } from 'react';
 import { ActivityIndicator } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -11,6 +11,7 @@ import * as ImagePicker from 'expo-image-picker';
 import ViewShot from 'react-native-view-shot';
 import { uploadProfilePicture, getProfilePicture, deleteProfilePicture, changeUserInfo, changePassword, changeEmail } from '@/utils/api';
 import * as SecureStore from 'expo-secure-store';
+import { commonStyles } from '@/styles/styles';
 // FileSystem not used here after refactor
 
 
@@ -30,6 +31,7 @@ export default function ProfileScreen() {
     ];
     return colors[Math.floor(Math.random() * colors.length)];
   });
+  const [refreshing, setRefreshing] = useState(false);
 
   // Helper to create object URL from blob
   const getBlobUrl = useCallback((blob: Blob | null) => {
@@ -144,100 +146,114 @@ export default function ProfileScreen() {
     );
   }, [takePhoto, pickImageAsync, setProfilePicture]);
 
-  // Swipe down gesture
-  const swipeDown = Gesture.Pan().onEnd(event => {
-    if (event.translationY > 50) {
-      // Could add refresh or navigation logic here
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    setIsLoading?.(true);
+    try {
+      await updateProfile(setProfileData, setIsLoading, setProfilePicture);
+    } catch (err) {
+      console.error('Pull to refresh error:', err);
+    } finally {
+      setIsLoading?.(false);
+      setRefreshing(false);
     }
-  });
+  }, [setProfileData, setIsLoading, setProfilePicture]);
 
   // UI
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
-      <GestureDetector gesture={swipeDown}>
-        <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
-          {/* Top right settings button */}
-          <View style={styles.headerRow}>
-            <View style={{ flex: 1 }} />
-            <TouchableOpacity
-              style={styles.settingsButton}
-              onPress={() => router.push('/(tabs)/profile/settings' as any)}
-            >
-              <Ionicons name="settings-outline" size={24} color="#585ABF" />
-            </TouchableOpacity>
-          </View>
+      {isLoading && (
+        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10, backgroundColor: 'rgba(255,255,255,0.7)', alignItems: 'center', paddingVertical: 8 }}>
+          <ActivityIndicator color="#585ABF" />
+        </View>
+      )}
+      <ScrollView
+        contentContainerStyle={styles.scrollContainer}
+        keyboardShouldPersistTaps="handled"
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#585ABF']} />
+        }
+      >
+        {/* Top right settings button */}
+        <View style={commonStyles.headerRow}>
+          <TouchableOpacity
+            style={commonStyles.circularButton}
+            onPress={() => router.push('/(tabs)/profile/settings' as any)}
+          >
+            <Ionicons name="settings-outline" size={24} color="#585ABF" />
+          </TouchableOpacity>
+        </View>
 
-          {/* Centered profile content */}
-          <View style={styles.centeredContent}>
-            {/* Interactive Avatar */}
-            <TouchableOpacity 
-              style={styles.avatarContainer}
-              onPress={showImageOptions}
-              activeOpacity={0.8}
-            >
-              <View style={styles.avatarWrapper}>
-                {selectedImage && typeof selectedImage === 'string' && (selectedImage ?? '').trim() !== '' ? (
-                  <Image
-                    source={{ uri: selectedImage as string }}
-                    style={styles.avatarImage}
-                    onError={e => {
-                      setImageError('Failed to load selected image');
-                      Alert.alert('Error', 'Failed to load selected image.');
-                    }}
-                  />
-                ) : profileBlobUrl ? (
-                  <Image
-                    source={{ uri: profileBlobUrl }}
-                    style={styles.avatarImage}
-                    onError={e => {
-                      setImageError('Failed to load profile image');
-                      Alert.alert('Error', 'Failed to load profile image.');
-                    }}
-                  />
-                ) : (
-                  <View style={[styles.avatar, { backgroundColor: avatarColor }]}> 
-                    <Text style={styles.avatarText}>
-                      {(profileData?.data?.displayName || 'User').charAt(0).toUpperCase()}
-                    </Text>
-                  </View>
-                )}
-                <View style={styles.cameraOverlay}>
-                  <Ionicons name="camera" size={18} color="#fff" />
-                </View>
-              </View>
-            </TouchableOpacity>
-
-            {/* Name and Email */}
-            <Text style={styles.title}>
-              {profileData?.data?.displayName || 'John Doe'}
-            </Text>
-            <Text style={styles.email}>
-              {profileData?.email || 'johndoe@email.com'}
-            </Text>
-
-            {/* Bio */}
-            <View style={styles.infoContainer}>
-              <Text style={styles.infoLabel}>Bio</Text>
-              <Text style={styles.infoText}>
-                {profileData?.data?.bio || 'This is a placeholder profile.'}
-              </Text>
-            </View>
-
-            {/* Update Profile Button */}
-            <TouchableOpacity
-              style={styles.continueButton}
-              onPress={() => updateProfile(setProfileData, setIsLoading, setProfilePicture)}
-              disabled={isLoading}
-            >
-              {isLoading ? (
-                <ActivityIndicator color="#fff" />
+        {/* Centered profile content */}
+        <View style={styles.centeredContent}>
+          {/* Interactive Avatar */}
+          <TouchableOpacity 
+            style={styles.avatarContainer}
+            onPress={showImageOptions}
+            activeOpacity={0.8}
+          >
+            <View style={styles.avatarWrapper}>
+              {selectedImage && typeof selectedImage === 'string' && (selectedImage ?? '').trim() !== '' ? (
+                <Image
+                  source={{ uri: selectedImage as string }}
+                  style={styles.avatarImage}
+                  onError={e => {
+                    setImageError('Failed to load selected image');
+                    Alert.alert('Error', 'Failed to load selected image.');
+                  }}
+                />
+              ) : profileBlobUrl ? (
+                <Image
+                  source={{ uri: profileBlobUrl }}
+                  style={styles.avatarImage}
+                  onError={e => {
+                    setImageError('Failed to load profile image');
+                    Alert.alert('Error', 'Failed to load profile image.');
+                  }}
+                />
               ) : (
-                <Text style={styles.continueButtonText}>Update Profile</Text>
+                <View style={[styles.avatar, { backgroundColor: avatarColor }]}> 
+                  <Text style={styles.avatarText}>
+                    {(profileData?.data?.displayName || 'User').charAt(0).toUpperCase()}
+                  </Text>
+                </View>
               )}
-            </TouchableOpacity>
+              <View style={styles.cameraOverlay}>
+                <Ionicons name="camera" size={18} color="#fff" />
+              </View>
+            </View>
+          </TouchableOpacity>
+
+          {/* Name and Email */}
+          <Text style={styles.title}>
+            {profileData?.data?.displayName || 'John Doe'}
+          </Text>
+          <Text style={styles.email}>
+            {profileData?.email || 'johndoe@email.com'}
+          </Text>
+
+          {/* Bio */}
+          <View style={styles.infoContainer}>
+            <Text style={styles.infoLabel}>Bio</Text>
+            <Text style={styles.infoText}>
+              {profileData?.data?.bio || 'This is a placeholder profile.'}
+            </Text>
           </View>
-        </ScrollView>
-      </GestureDetector>
+
+          {/* Update Profile Button */}
+          <TouchableOpacity
+            style={styles.continueButton}
+            onPress={() => updateProfile(setProfileData, setIsLoading, setProfilePicture)}
+            disabled={isLoading}
+          >
+            {isLoading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.continueButtonText}>Update Profile</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -250,25 +266,11 @@ const styles = StyleSheet.create({
     paddingTop: 48,
     paddingBottom: 32,
   },
-  headerRow: {
-    flexDirection: 'row',
-    width: '100%',
-    justifyContent: 'flex-end',
-    marginBottom: 8,
-  },
   centeredContent: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     minHeight: 500,
-  },
-  settingsButton: {
-    padding: 8,
-    borderRadius: 20,
-    backgroundColor: '#f5f5f5',
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 2,
   },
   avatarContainer: {
     marginTop: 8,
