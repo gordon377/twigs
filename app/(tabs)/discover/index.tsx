@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { StyleSheet, Text, View, TextInput, Animated, Easing, Platform, Dimensions } from 'react-native';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { StyleSheet, Text, View, TextInput, Animated, Easing, FlatList, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { searchProfiles } from '@/utils/api';
@@ -11,6 +11,9 @@ type Profile = {
   username?: string;
   displayName?: string;
   bio?: string;
+  profile_link?: string;
+  email?: string;
+  user_id?: string;
 };
 
 export default function DiscoverScreen() {
@@ -18,15 +21,12 @@ export default function DiscoverScreen() {
   const [results, setResults] = useState<Profile[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
-  const [headerHeight, setHeaderHeight] = useState(0);
-  const [selectedProfile, setSelectedProfile] = useState<Profile | null>(null);
   const router = useRouter();
   const overlayAnim = useRef(new Animated.Value(0)).current;
+  const debounceTimeout = useRef<NodeJS.Timeout | null>(null);
+  const blurTimeout = useRef<NodeJS.Timeout | null>(null);
 
-  // Debounce logic
-  const debounceTimeout = useRef<number | null>(null);
-
-  const handleSearch = (query: string) => {
+  const handleSearch = useCallback((query: string) => {
     setSearch(query);
     if (debounceTimeout.current) {
       clearTimeout(debounceTimeout.current);
@@ -52,6 +52,9 @@ export default function DiscoverScreen() {
               username: profile.username,
               displayName: profile.displayName,
               bio: profile.bio,
+              profile_link: profile.profile_link,
+              email: profile.email,
+              user_id: profile.id,
             }))
           );
         } else {
@@ -62,116 +65,165 @@ export default function DiscoverScreen() {
       } finally {
         setIsLoading(false);
       }
-    }, 400); // 400ms debounce
-  };
+    }, 400);
+  }, []);
 
   // Animate overlay fade in/out when focus changes
   useEffect(() => {
     Animated.timing(overlayAnim, {
       toValue: isFocused ? 1 : 0,
-      duration: 250,
-      easing: Easing.out(Easing.cubic),
+      duration: 200,
+      easing: Easing.out(Easing.ease),
       useNativeDriver: true,
     }).start();
   }, [isFocused, overlayAnim]);
 
-  // Overlay opacity animation
-  const overlayOpacity = overlayAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, 1],
-  });
+  // Memoize overlay opacity to prevent recalculation
+  const overlayOpacity = useMemo(
+    () =>
+      overlayAnim.interpolate({
+        inputRange: [0, 1],
+        outputRange: [0, 1],
+      }),
+    [overlayAnim]
+  );
+
+  // Handle focus
+  const handleFocus = useCallback(() => {
+    if (blurTimeout.current) {
+      clearTimeout(blurTimeout.current);
+      blurTimeout.current = null;
+    }
+    setIsFocused(true);
+  }, []);
+
+  // Handle blur with delay to allow taps to complete
+  const handleBlur = useCallback(() => {
+    blurTimeout.current = setTimeout(() => {
+      setIsFocused(false);
+    }, 200);
+  }, []);
+
+  // Memoize navigation handler
+  const handleProfilePress = useCallback(
+    (profile: Profile) => {
+      // Cancel blur to keep results visible during navigation
+      if (blurTimeout.current) {
+        clearTimeout(blurTimeout.current);
+        blurTimeout.current = null;
+      }
+      router.push({
+        pathname: '/(tabs)/discover/searchProfile',
+        params: {
+          username: profile.username,
+          displayName: profile.displayName,
+          bio: profile.bio,
+          avatarUrl: profile.profile_link,
+          email: profile.email,
+          userId: profile.user_id,
+        },
+      });
+    },
+    [router]
+  );
+
+  // Render item for FlatList
+  const renderProfileItem = useCallback(
+    ({ item }: { item: Profile }) => (
+      <TouchableOpacity
+        activeOpacity={0.7}
+        onPress={() => {
+          console.log('Profile pressed:', item.username);
+          handleProfilePress(item);
+        }}
+        style={styles.profileTouchable}
+      >
+        <SmallProfile username={item.username} displayName={item.displayName} />
+      </TouchableOpacity>
+    ),
+    [handleProfilePress]
+  );
+
+  // Key extractor for FlatList
+  const keyExtractor = useCallback((item: Profile, index: number) => item.user_id || `profile-${index}`, []);
+
+  // Cleanup timeouts on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceTimeout.current) {
+        clearTimeout(debounceTimeout.current);
+      }
+      if (blurTimeout.current) {
+        clearTimeout(blurTimeout.current);
+      }
+    };
+  }, []);
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* If not focused, show header and main content. If focused, show overlay with search bar inside */}
-      {!isFocused && (
-        <>
-          <View style={styles.header}>
-            <View style={styles.searchBarContainer}>
-              <View style={styles.searchBarWrapper}>
-                <Ionicons name="search" size={22} color="#888" style={styles.searchIcon} />
-                <TextInput
-                  style={styles.searchBar}
-                  placeholder="Search..."
-                  placeholderTextColor="#888"
-                  value={search}
-                  onChangeText={handleSearch}
-                  onFocus={() => setIsFocused(true)}
-                  onBlur={() => setIsFocused(false)}
-                />
-              </View>
-            </View>
+      <KeyboardAvoidingView style={styles.keyboardView} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        {/* Search bar - always rendered in same position */}
+        <View style={styles.searchBarContainer}>
+          <View style={styles.searchBarWrapper}>
+            <Ionicons name="search" size={22} color="#888" style={styles.searchIcon} />
+            <TextInput
+              style={styles.searchBar}
+              placeholder="Search..."
+              placeholderTextColor="#888"
+              value={search}
+              onChangeText={handleSearch}
+              onFocus={handleFocus}
+              onBlur={handleBlur}
+            />
           </View>
-          <View style={styles.contentContainer}>
-            <View style={styles.titleRow}>
-              <Ionicons name="compass" size={28} color="#222" style={styles.compassIcon} />
-              <Text style={styles.title}>Discover</Text>
-            </View>
-            <Text style={styles.subtitle}>Find new events, people, and communities.</Text>
-          </View>
-          <View style={styles.comingSoonContainer}>
-            <Text style={styles.comingSoonText}>More features coming soon...</Text>
-          </View>
-        </>
-      )}
-
-      {isFocused && (
-        <Animated.View
-          pointerEvents="auto"
-          style={[styles.overlay, { opacity: overlayOpacity }]}
-        >
-          {/* Search bar inside overlay */}
-          <View style={styles.searchBarContainer}>
-            <View style={styles.searchBarWrapper}>
-              <Ionicons name="search" size={22} color="#888" style={styles.searchIcon} />
-              <TextInput
-                style={styles.searchBar}
-                placeholder="Search..."
-                placeholderTextColor="#888"
-                value={search}
-                onChangeText={handleSearch}
-                autoFocus
-                onFocus={() => setIsFocused(true)}
-                onBlur={() => setIsFocused(false)}
-              />
-            </View>
+          {isFocused && (
             <Text style={styles.searchHint}>
               Searches must be exact. Use @ to search by username handle or without it to search by display name.
             </Text>
-          </View>
-          {/* Search results below search bar */}
-          {isLoading ? (
-            <View style={styles.loadingContainer}>
-              <Text style={styles.loadingText}>Loading...</Text>
-            </View>
-          ) : results.length > 0 ? (
-            results.map((profile, idx) => (
-              <TouchableOpacity
-                key={idx}
-                activeOpacity={0.7}
-                onPress={() => {
-                  router.push({
-                    pathname: '/(tabs)/discover/searchProfile',
-                    params: {
-                      username: profile.username,
-                      displayName: profile.displayName,
-                      bio: profile.bio,
-                    },
-                  });
-                }}
-              >
-                <SmallProfile username={profile.username} displayName={profile.displayName} />
-              </TouchableOpacity>
-            ))
-          ) : (
-            <View style={styles.placeholderContainer}>
-              <Text style={styles.placeholderText}>No results found.</Text>
-            </View>
           )}
+        </View>
 
-          {/* BigProfile modal (no longer used, navigation instead) */}
-        </Animated.View>
-      )}
+        {/* Content area - switches between default view and results */}
+        {!isFocused ? (
+          <>
+            <View style={styles.contentContainer}>
+              <View style={styles.titleRow}>
+                <Ionicons name="compass" size={28} color="#222" style={styles.compassIcon} />
+                <Text style={styles.title}>Discover</Text>
+              </View>
+              <Text style={styles.subtitle}>Find new events, people, and communities.</Text>
+            </View>
+            <View style={styles.comingSoonContainer}>
+              <Text style={styles.comingSoonText}>More features coming soon...</Text>
+            </View>
+          </>
+        ) : (
+          <View style={styles.resultsContainer}>
+            {isLoading ? (
+              <View style={styles.loadingContainer}>
+                <Text style={styles.loadingText}>Loading...</Text>
+              </View>
+            ) : results.length > 0 ? (
+              <FlatList
+                data={results}
+                renderItem={renderProfileItem}
+                keyExtractor={keyExtractor}
+                contentContainerStyle={styles.listContent}
+                showsVerticalScrollIndicator={true}
+                removeClippedSubviews={true}
+                maxToRenderPerBatch={10}
+                windowSize={10}
+                initialNumToRender={10}
+                keyboardShouldPersistTaps="handled"
+              />
+            ) : search.trim().length > 0 ? (
+              <View style={styles.placeholderContainer}>
+                <Text style={styles.placeholderText}>No results found.</Text>
+              </View>
+            ) : null}
+          </View>
+        )}
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -180,11 +232,14 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#fff',
+  },
+  keyboardView: {
+    flex: 1,
     paddingHorizontal: 20,
-    paddingTop: 0,
   },
   searchBarContainer: {
     marginBottom: 20,
+    marginTop: 10,
   },
   searchBarWrapper: {
     flexDirection: 'row',
@@ -204,6 +259,13 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     fontSize: 16,
     backgroundColor: 'transparent',
+  },
+  searchHint: {
+    color: '#aaa',
+    fontSize: 13,
+    fontStyle: 'italic',
+    marginTop: 8,
+    textAlign: 'center',
   },
   contentContainer: {
     alignItems: 'center',
@@ -227,52 +289,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: 'center',
   },
-  placeholderContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 30,
-  },
-  header: {
-    width: '100%',
-    backgroundColor: '#fff',
-    paddingTop: 0,
-    paddingBottom: 0,
-    zIndex: 20,
-  },
-  overlay: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 0,
-    bottom: 0,
-    backgroundColor: '#fff',
-    zIndex: 99,
-    paddingHorizontal: 20,
-    paddingTop: 60,
-    borderTopLeftRadius: 0,
-    borderTopRightRadius: 0,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    color: '#888',
-    fontSize: 16,
-    fontStyle: 'italic',
-  },
-  placeholderText: {
-    color: '#aaa',
-    fontSize: 16,
-    fontStyle: 'italic',
-  },
   comingSoonContainer: {
     position: 'absolute',
     left: 0,
@@ -286,12 +302,35 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontStyle: 'italic',
   },
-  searchHint: {
-    color: '#aaa',
-    fontSize: 13,
+  resultsContainer: {
+    flex: 1,
+  },
+  listContent: {
+    paddingBottom: 20,
+  },
+  profileTouchable: {
+    width: '100%',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  loadingText: {
+    color: '#888',
+    fontSize: 16,
     fontStyle: 'italic',
-    marginTop: 4,
-    marginBottom: 8,
-    textAlign: 'center',
+  },
+  placeholderContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  placeholderText: {
+    color: '#aaa',
+    fontSize: 16,
+    fontStyle: 'italic',
   },
 });

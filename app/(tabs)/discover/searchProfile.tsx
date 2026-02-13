@@ -6,7 +6,7 @@ export default function SearchProfileScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
 
-  // Params expected: username, displayName, bio, email, avatarUrl
+  // Params expected: username, displayName, bio, email, avatarUrl, userId
   return (
     <BigProfile
       username={typeof params.username === 'string' ? params.username : undefined}
@@ -14,7 +14,7 @@ export default function SearchProfileScreen() {
       bio={typeof params.bio === 'string' ? params.bio : undefined}
       email={typeof params.email === 'string' ? params.email : undefined}
       avatarUrl={typeof params.avatarUrl === 'string' ? params.avatarUrl : undefined}
-      userId= {typeof params.id === 'string' ? params.id : undefined}
+      userId={typeof params.userId === 'string' ? params.userId : undefined}
       onClose={() => router.back()}
     />
   );

@@ -719,19 +719,20 @@ export const getCalendars = async () => {
     }
 
     console.log('Making API call...');
-    const response = await axios.get(
-      `${API_BASE}/calendar`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json'
+    const response = await fetch(`${API_BASE}/calendar`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
         },
-      }
-    );
-    console.log('API call successful');
-    console.log('Response data:', response.data);
+      });
 
-    return { success: true, data: response.data };
+    const data = await response.json();
+
+    console.log('API call successful');
+    console.log('Response data:', data);
+
+    return { success: true, data: data };
   } catch (error: any) {
     console.log('Error in getCalendars:', error);
     return { 
@@ -1334,116 +1335,205 @@ export const respondToEventProposal = async (
 
 // Send a connection request
 export const sendConnectionRequest = async (targetUserId: string) => {
+  console.log('sendConnectionRequest called with targetUserId:', targetUserId);
   try {
     const token = await SecureStore.getItemAsync('accessToken');
     if (!token) throw new Error('No access token found');
 
-    const response = await fetch(
-      `${API_BASE}/connect/request/${encodeURIComponent(targetUserId)}`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
+    const url = `${API_BASE}/connection/request/${encodeURIComponent(targetUserId)}`;
+    console.log('Request URL:', url);
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
       }
-    );
+    });
+
+    console.log('Response status:', response.status);
+    console.log('Response ok:', response.ok);
 
     if (!response.ok) {
       const errorData = await response.json();
-      return { success: false, error: errorData.detail || 'Failed to send connection request' };
+      console.log('Error response data:', errorData);
+      return { success: false, error: errorData.detail || errorData.message || 'Failed to send connection request' };
     }
 
     const data = await response.json();
+    console.log('Success response data:', data);
     return { success: true, data };
   } catch (error: any) {
+    console.log('Exception in sendConnectionRequest:', error);
     return { success: false, error: error.message };
   }
 };
 
 // Accept a connection request
 export const acceptConnectionRequest = async (targetUserId: string) => {
+  console.log('acceptConnectionRequest called with targetUserId:', targetUserId);
   try {
     const token = await SecureStore.getItemAsync('accessToken');
     if (!token) throw new Error('No access token found');
 
-    const response = await fetch(
-      `${API_BASE}/connect/accept/${encodeURIComponent(targetUserId)}`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
+    const url = `${API_BASE}/connection/accept/${encodeURIComponent(targetUserId)}`;
+    console.log('Accept request URL:', url);
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
       }
-    );
+    });
+
+    console.log('Accept response status:', response.status);
+    console.log('Accept response ok:', response.ok);
 
     if (!response.ok) {
       const errorData = await response.json();
-      return { success: false, error: errorData.detail || 'Failed to accept connection request' };
+      console.log('Accept error response data:', errorData);
+      return { success: false, error: errorData.detail || errorData.message || 'Failed to accept connection request' };
     }
 
     const data = await response.json();
+    console.log('Accept success response data:', data);
     return { success: true, data };
   } catch (error: any) {
+    console.log('Exception in acceptConnectionRequest:', error);
     return { success: false, error: error.message };
   }
 };
 
 // Reject a connection request
 export const rejectConnectionRequest = async (targetUserId: string) => {
+  console.log('rejectConnectionRequest called with targetUserId:', targetUserId);
   try {
     const token = await SecureStore.getItemAsync('accessToken');
     if (!token) throw new Error('No access token found');
 
-    const response = await fetch(
-      `${API_BASE}/connect/reject/${encodeURIComponent(targetUserId)}`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
+    const url = `${API_BASE}/connection/reject/${encodeURIComponent(targetUserId)}`;
+    console.log('Reject request URL:', url);
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
       }
-    );
+    });
+
+    console.log('Reject response status:', response.status);
+    console.log('Reject response ok:', response.ok);
 
     if (!response.ok) {
       const errorData = await response.json();
-      return { success: false, error: errorData.detail || 'Failed to reject connection request' };
+      console.log('Reject error response data:', errorData);
+      return { success: false, error: errorData.detail || errorData.message || 'Failed to reject connection request' };
     }
 
     const data = await response.json();
+    console.log('Reject success response data:', data);
     return { success: true, data };
   } catch (error: any) {
+    console.log('Exception in rejectConnectionRequest:', error);
     return { success: false, error: error.message };
   }
 };
 
 // Remove a connection (unconnect) with a user
-export const removeConnection = async (targetUserId: string) => {
+// Backend expects DELETE /connection/delete/{target_id} where:
+// - Current user ID comes from JWT token (follower_id in backend)
+// - target_id from URL becomes followed_id in backend
+// However, connection could be stored in either direction, so we try the other user ID
+export const removeConnection = async (followerId: string, followedId: string) => {
+  console.log('removeConnection called with followerId:', followerId, 'followedId:', followedId);
   try {
     const token = await SecureStore.getItemAsync('accessToken');
     if (!token) return { success: false, error: 'No access token found' };
 
-    const response = await fetch(
-      `${API_BASE}/connection/delete/${encodeURIComponent(targetUserId)}`,
-      {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
+    // Get current user ID from profile or token
+    // The API will use the current user from JWT token as follower_id
+    // So we need to determine which user is the "other" user to send as target_id
+
+    // The backend calls: delete_connection(currentUserId_from_token, target_id_from_url)
+    // This searches for: follower_id=currentUserId AND followed_id=target_id
+
+    // We need to check the actual connection structure and send the other user's ID
+    // But since the connection could be in either direction, let's try the followedId first
+    // (assuming current user is follower), and if that fails, the connection might be reversed
+
+    const url = `${API_BASE}/connection/delete/${encodeURIComponent(followedId)}`;
+    console.log('Trying to delete connection. URL:', url);
+    console.log('This will search for follower_id=currentUser, followed_id=', followedId);
+
+    const response = await fetch(url, {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
       }
-    );
+    });
+
+    console.log('Remove response status:', response.status);
+    console.log('Remove response ok:', response.ok);
+
+    const responseText = await response.text();
+    console.log('Remove response text:', responseText);
 
     if (!response.ok) {
-      const errorData = await response.json();
-      return { success: false, error: errorData.message || 'Failed to remove connection' };
+      let errorData;
+      try {
+        errorData = JSON.parse(responseText);
+      } catch {
+        errorData = { detail: responseText || 'Failed to remove connection' };
+      }
+      console.log('Remove error response data:', errorData);
+
+      // If we get "Unable to make request", the connection might be stored in reverse
+      // Try with the follower ID instead
+      if (errorData.detail === 'Unable to make request') {
+        console.log('First attempt failed, trying reverse direction with followerId:', followerId);
+        const reverseUrl = `${API_BASE}/connection/delete/${encodeURIComponent(followerId)}`;
+        console.log('Reverse URL:', reverseUrl);
+
+        const reverseResponse = await fetch(reverseUrl, {
+          method: 'DELETE',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        console.log('Reverse response status:', reverseResponse.status);
+        const reverseText = await reverseResponse.text();
+        console.log('Reverse response text:', reverseText);
+
+        if (reverseResponse.ok) {
+          let data;
+          try {
+            data = reverseText ? JSON.parse(reverseText) : {};
+          } catch {
+            data = { message: 'Connection removed successfully' };
+          }
+          console.log('Reverse attempt succeeded!');
+          return { success: true, data };
+        }
+      }
+
+      return { success: false, error: errorData.detail || errorData.message || 'Failed to remove connection' };
     }
 
-    const data = await response.json();
+    let data;
+    try {
+      data = responseText ? JSON.parse(responseText) : {};
+    } catch {
+      data = { message: 'Connection removed successfully' };
+    }
+    console.log('Remove success response data:', data);
     return { success: true, data };
   } catch (error: any) {
+    console.log('Exception in removeConnection:', error);
     return { success: false, error: error.message };
   }
 };
@@ -1467,9 +1557,11 @@ export const getConnections = async () => {
       const errorData = await response.json();
       throw new Error(errorData.message || 'Failed to fetch connections');
     }
-    console.log('Response Data: ', response);
 
     const data = await response.json();
+
+    console.log('Connections Data: ', data);
+
     return { success: true, data };
   } catch (error: any) {
     return { success: false, error: error.message };

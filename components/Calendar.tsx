@@ -5,8 +5,8 @@ import { colors } from '@/styles/styles';
 import { useEvents } from '@/hooks/useEvents';
 import { CalendarEvent, dateTimeHelpers } from '@/types/events';
 import { Ionicons } from '@expo/vector-icons';
-import PagerView from 'react-native-pager-view';
 import { Calendar } from 'react-native-calendars';
+import Carousel from 'react-native-reanimated-carousel';
 
 const router = useRouter();
 
@@ -157,28 +157,63 @@ type SingleDateCalendarProps = {
   selectedDate: string;
   setSelectedDate: (date: string) => void;
   onDoubleTapDay?: (date: string) => void;
+  calendarHeight?: number;
 };
 
 const SCREEN_HEIGHT = Dimensions.get('window').height;
-const PAGE_RANGE = 3; // Number of months to render on either side of the current month
+const VIRTUAL_TOTAL = 10000;
+const INITIAL_INDEX = Math.floor(VIRTUAL_TOTAL / 2);
+const WINDOW_SIZE = 5; // Only render 5 months at a time
+const DEFAULT_CALENDAR_HEIGHT = SCREEN_HEIGHT * 0.38;
 
-export const SingleDateCalendar = forwardRef<any, SingleDateCalendarProps>((
-  { selectedDate, setSelectedDate, onDoubleTapDay },
-  ref
-) => {
-  const { getEventsForDate } = useEvents();
-  const pagerRef = useRef<PagerView>(null);
+// Month index helpers
+const getMonthIndex = (dateStr: string) => {
+  const [year, month] = dateStr.split('-').map(Number);
+  return (year - 2000) * 12 + (month - 1);
+};
+
+export const SingleDateCalendar = forwardRef<any, SingleDateCalendarProps>(({
+  selectedDate,
+  setSelectedDate,
+  onDoubleTapDay,
+  calendarHeight = DEFAULT_CALENDAR_HEIGHT,
+}, ref) => {
+  const { getEventsForDate, events, isLoadingEvents } = useEvents();
   const calendarOpacity = useRef(new Animated.Value(1)).current;
-  const [transitioning, setTransitioning] = useState(false);
+  const [carouselIndex, setCarouselIndex] = useState(() => getMonthIndex(selectedDate));
 
-  // Key to force PagerView remount (for backToToday)
-  const [pagerKey, setPagerKey] = useState(0);
+  // Precompute months with events
+  const monthsWithEvents = useMemo(() => {
+    const set = new Set<string>();
+    for (const event of events) {
+      const start = new Date(event.startDate);
+      const end = new Date(event.endDate);
+      let d = new Date(start.getFullYear(), start.getMonth(), 1);
+      const endMonth = new Date(end.getFullYear(), end.getMonth(), 1);
+      while (d <= endMonth) {
+        set.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+        d.setMonth(d.getMonth() + 1);
+      }
+    }
+    return set;
+  }, [events]);
 
-  // Track last handled page position to avoid duplicate onPageSelected events
-  const lastPagePositionRef = useRef<number | null>(null);
+  // Track the current visible month index
+  const carouselRef = useRef<any>(null);
+  const isUserScrolling = useRef(false); // Track if change is from user scrolling
 
-  // Track the base month index at the time PagerView is rendered
-  const baseMonthIndexRef = useRef<number>(0);
+  useEffect(() => {
+      const idx = getMonthIndex(selectedDate);
+      setCarouselIndex(idx);
+
+      // Only scroll the carousel if this change didn't come from user scrolling
+      if (carouselRef.current && !isUserScrolling.current) {
+        carouselRef.current.scrollTo({ index: idx, animated: true });
+      }
+
+      // Reset the flag after handling
+      isUserScrolling.current = false;
+  }, [selectedDate]);
 
   // Helper to fade calendar
   const fadeCalendar = (toValue: number, callback?: () => void) => {
@@ -189,84 +224,16 @@ export const SingleDateCalendar = forwardRef<any, SingleDateCalendarProps>((
     }).start(() => callback && callback());
   };
 
-  // Get month index helpers
-  const getMonthIndex = (dateStr: string) => {
-    const [year, month] = dateStr.split('-').map(Number);
-    return (year - 2000) * 12 + (month - 1);
-  };
-  const getMonthString = (index: number) => {
-    const year = 2000 + Math.floor(index / 12);
-    const month = (index % 12) + 1;
-    return `${year}-${String(month).padStart(2, '0')}`;
-  };
-
-  // Derive currentMonthIndex from selectedDate (single source of truth)
-  const currentMonthIndex = useMemo(() => getMonthIndex(selectedDate), [selectedDate]);
-
-  // --- Flickerless Infinite Pager Logic ---
-  // Virtual month index for rendering pages
-  const [virtualMonthIndex, setVirtualMonthIndex] = useState(currentMonthIndex);
-
-  // Keep baseMonthIndexRef and virtualMonthIndex in sync with selectedDate
-  useEffect(() => {
-    baseMonthIndexRef.current = currentMonthIndex;
-    setVirtualMonthIndex(currentMonthIndex);
-  }, [currentMonthIndex]);
-
-  // Expose a method to parent (index.tsx in calendar folder)
+  // Expose backToToday
   useImperativeHandle(ref, () => ({
     backToToday: () => {
       fadeCalendar(0, () => {
-        const today = new Date();
-        const year = today.getFullYear();
-        const month = String(today.getMonth() + 1).padStart(2, '0');
-        const day = String(today.getDate()).padStart(2, '0');
-        const todayStr = `${year}-${month}-${day}`;
-        setSelectedDate(todayStr);
-        setPagerKey(prev => prev + 1); // Force PagerView to remount
-        lastPagePositionRef.current = null; // Reset on remount
-        setTimeout(() => {
-          fadeCalendar(1);
-        }, 0);
+        const today = dateTimeHelpers.getTodayStringInTimezone();
+        setSelectedDate(today);
+        setTimeout(() => fadeCalendar(1), 0);
       });
     }
   }));
-
-  // Event dots
-  const marks = useMemo(() => {
-    const marks: Record<string, any> = {};
-    const monthsToRender = [];
-    for (let i = -PAGE_RANGE; i <= PAGE_RANGE; i++) {
-      monthsToRender.push(virtualMonthIndex + i)
-    }
-    monthsToRender.forEach(monthIndex => {
-      const year = 2000 + Math.floor(monthIndex / 12);
-      const month = (monthIndex % 12) + 1;
-      const firstDay = new Date(Date.UTC(year, month - 1, 1));
-      const lastDay = new Date(Date.UTC(year, month, 0));
-      for (
-        let d = new Date(firstDay);
-        d <= lastDay;
-        d.setUTCDate(d.getUTCDate() + 1)
-      ) {
-        const dateStr = d.toISOString().slice(0, 10);
-        const events = getEventsForDate(dateStr);
-        if (events.length > 0) {
-          marks[dateStr] = { 
-            marked: true, 
-            dotColor: events[0]?.hexcode || colors.primary,
-          };
-        }
-      }
-    });
-    marks[selectedDate] = { 
-      ...(marks[selectedDate] || {}), 
-      selected: true, 
-      selectedColor: colors.primary,
-      selectedTextColor: colors.white,
-    };
-    return marks;
-  }, [getEventsForDate, selectedDate, virtualMonthIndex]);
 
   // Double tap logic
   const lastTapRef = useRef<number>(0);
@@ -285,127 +252,146 @@ export const SingleDateCalendar = forwardRef<any, SingleDateCalendarProps>((
     [setSelectedDate, onDoubleTapDay]
   );
 
-  // PagerView page change handler (user swipes)
-  const skipNextPageSelectedRef = useRef(false);
-  const pendingMonthRef = useRef<string | null>(null);
 
-  const handlePageSelected = useCallback(
-    (e: { nativeEvent: { position: number } }) => {
-      if (skipNextPageSelectedRef.current) {
-        skipNextPageSelectedRef.current = false;
-        return;
+  
+  // Carousel render item (marks calculation moved here for only the visible month)
+  const renderMonth = useCallback(({ item }: { item: number }) => {
+    console.log('Rendering month at index:', item);
+    const safeMonthIndex = Math.max(0, Math.min(item, 2399));
+    const year = 2000 + Math.floor(safeMonthIndex / 12);
+    const month = (safeMonthIndex % 12) + 1;
+    const currentDate = `${year}-${String(month).padStart(2, '0')}-01`;
+    const monthKey = `${year}-${String(month).padStart(2, '0')}`;
+    console.log('Current Date for month:', currentDate);
+
+    let marks: Record<string, any> = {};
+
+    // Only compute marks if this month has events
+    if (monthsWithEvents.has(monthKey)) {
+      const firstDay = new Date(Date.UTC(year, month - 1, 1));
+      const lastDay = new Date(Date.UTC(year, month, 0));
+      for (
+        let d = new Date(firstDay);
+        d <= lastDay;
+        d.setUTCDate(d.getUTCDate() + 1)
+      ) {
+        const dateStr = d.toISOString().slice(0, 10);
+        let events: CalendarEvent[] = [];
+        try {
+          events = getEventsForDate(dateStr);
+        } catch {
+          continue;
+        }
+        if (events.length > 0) {
+          marks[dateStr] = { 
+            marked: true, 
+            dotColor: events[0]?.hexcode || colors.primary,
+          };
+        }
       }
-      const position = e.nativeEvent.position;
-      if (lastPagePositionRef.current === position) {
-        return;
-      }
-      lastPagePositionRef.current = position;
-
-      const pageOffset = position - PAGE_RANGE;
-      if (pageOffset === 0) {
-        setTransitioning(false);
-        return;
-      }
-      setTransitioning(true); // <--- Disable swiping during recenter
-
-      setVirtualMonthIndex(prev => prev + pageOffset);
-
-      const newMonthIndex = baseMonthIndexRef.current + pageOffset;
-      const newMonthStr = getMonthString(newMonthIndex);
-      const newDate = `${newMonthStr}-01`;
-
-      if (selectedDate !== newDate) {
-        pendingMonthRef.current = newDate;
-        skipNextPageSelectedRef.current = true;
-        pagerRef.current?.setPageWithoutAnimation(PAGE_RANGE);
-        lastPagePositionRef.current = PAGE_RANGE;
-      }
-      // Don't setTransitioning(false) here!
-    },
-    [selectedDate]
-  );
-
-  const handlePageScrollStateChanged = useCallback((e: { nativeEvent: { pageScrollState: string } }) => {
-    if (e.nativeEvent.pageScrollState === 'idle' && pendingMonthRef.current) {
-      setSelectedDate(pendingMonthRef.current);
-      pendingMonthRef.current = null;
-      setTransitioning(false); // <--- Re-enable swiping after recenter
     }
+
+    // Always highlight selected date if it's in this month
+    if (selectedDate.startsWith(monthKey)) {
+      marks[selectedDate] = { 
+        ...(marks[selectedDate] || {}), 
+        selected: true, 
+        selectedColor: colors.primary,
+        selectedTextColor: colors.white,
+      };
+    }
+
+    return (
+      <View key={safeMonthIndex} style={styles.calendarPage}>
+        <Calendar
+          current={currentDate}
+          onDayPress={onDayPress}
+          markedDates={marks}
+          hideArrows={true}
+          hideExtraDays={false}
+          disableMonthChange={true}
+          theme={calendarTheme}
+          style={styles.calendar}
+        />
+      </View>
+    );
+  }, [getEventsForDate, onDayPress, selectedDate, monthsWithEvents]);
+
+
+  // Update the carouselIndex based on the item index
+  const handleSnapToItem = useCallback((index: number) => {
+    setCarouselIndex(index);
+
+    // Calculate the date for this month index and update selectedDate
+    const safeMonthIndex = Math.max(0, Math.min(index, 2399));
+    const year = 2000 + Math.floor(safeMonthIndex / 12);
+    const month = (safeMonthIndex % 12) + 1;
+    const newDate = `${year}-${String(month).padStart(2, '0')}-01`;
+
+    // Mark that this change is from user scrolling to prevent feedback loop
+    isUserScrolling.current = true;
+
+    // Update selected date to the first of the new month
+    setSelectedDate(newDate);
   }, [setSelectedDate]);
 
-  // Pager pages: always render 3 pages based on virtualMonthIndex
-  const monthPages = useMemo(() => {
-    const pages = [];
-    for (let i = -PAGE_RANGE; i <= PAGE_RANGE; i++) {
-      const monthIndex = virtualMonthIndex + i;
-      pages.push(
-        <View key={monthIndex} style={styles.calendarPage}>
-          <Calendar
-            current={getMonthString(monthIndex) + '-01'}
-            onDayPress={onDayPress}
-            markedDates={marks}
-            hideArrows={true}
-            hideExtraDays={false}
-            disableMonthChange={true}
-            theme={calendarTheme}
-            style={styles.calendar}
-          />
-        </View>
-      );
-    }
-    return pages;
-  }, [virtualMonthIndex, marks, onDayPress]);
+  // Show loading state if needed
+  if (isLoadingEvents) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <Text>Loading calendars and events...</Text>
+      </View>
+    );
+  }
+
+  // Generate full data array for carousel (virtual list of months)
+  const carouselData = useMemo(() => {
+    return Array.from({ length: VIRTUAL_TOTAL }, (_, i) => i);
+  }, []);
+
+  const CAROUSEL_WIDTH = Dimensions.get('window').width;
 
   return (
-    <View style={{ height: SCREEN_HEIGHT * 0.45, flex: 1 }}>
-      <View style={styles.calendarContainer}>
-        <Animated.View style={{ opacity: calendarOpacity, height: SCREEN_HEIGHT * 0.45, flex: 1 }}>
-          <PagerView
-            key={pagerKey}
-            ref={pagerRef}
-            style={styles.pagerView}
-            orientation="vertical"
-            initialPage={PAGE_RANGE}
-            onPageSelected={handlePageSelected}
-            onPageScrollStateChanged={handlePageScrollStateChanged}
-            overdrag={false}
-            scrollEnabled={!transitioning} // <--- This disables swiping while transitioning
-          >
-            {monthPages}
-          </PagerView>
-        </Animated.View>
-      </View>
-      <EventsList date={selectedDate} />
+    <View style={styles.calendarWrapper}>
+      <Animated.View style={{ opacity: calendarOpacity, width: '100%' }}>
+        <Carousel
+          ref={carouselRef}
+          defaultIndex={carouselIndex}
+          width={CAROUSEL_WIDTH}
+          height={calendarHeight}
+          data={carouselData}
+          renderItem={renderMonth}
+          loop={false}
+          snapEnabled
+          onSnapToItem={handleSnapToItem}
+          windowSize={WINDOW_SIZE}
+          scrollAnimationDuration={100}
+          vertical
+        />
+      </Animated.View>
     </View>
   );
 });
 
 const styles = StyleSheet.create({
   // Calendar Container
-  calendarContainer: {
-    flex: 1,
-    minHeight: SCREEN_HEIGHT * 0.45,
+  calendarWrapper: {
+    width: '100%',
+    overflow: 'visible',
   },
   calendarPage: {
-    flex: 1,
-  },
-  pagerView: {
-    flex: 1,
-    minHeight: SCREEN_HEIGHT * 0.45,
+    height: '100%',
+    overflow: 'hidden',
+    justifyContent: 'flex-start',
   },
   
   // Calendar Styling
   calendar: {
-    borderRadius: 20,
+    borderRadius: 0,
     margin: 0,
-    marginBottom: 0,
-    elevation: 4,
-    shadowColor: colors.black,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    backgroundColor: colors.white,
-    padding: 8,
+    elevation: 0,
+    backgroundColor: colors.background,
+    padding: 0,
   },
 
   // Events List Container

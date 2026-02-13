@@ -1,21 +1,10 @@
-import React, { useEffect, useRef } from 'react';
-import { Dimensions, View, StyleSheet } from 'react-native';
-import Svg, { Line, Circle, Text } from 'react-native-svg';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Dimensions, View, StyleSheet, PanResponder } from 'react-native';
+import Svg, { Line, Circle, Text, G } from 'react-native-svg';
 import * as d3 from 'd3-force';
-import { PanGestureHandler, PinchGestureHandler, PanGestureHandlerGestureEvent, PinchGestureHandlerGestureEvent } from 'react-native-gesture-handler';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  useAnimatedProps,
-  useAnimatedGestureHandler,
-} from 'react-native-reanimated';
 
 type NodeDatum = { id: string; name?: string; x?: number; y?: number; fx?: number; fy?: number; };
 type LinkDatum = { source: string; target: string; };
-
-const AnimatedLine = Animated.createAnimatedComponent(Line);
-const AnimatedCircle = Animated.createAnimatedComponent(Circle);
-const AnimatedText = Animated.createAnimatedComponent(Text);
 
 export default function NetworkTree({
   nodes: initialNodes,
@@ -25,45 +14,85 @@ export default function NetworkTree({
   links: LinkDatum[];
 }) {
   const { width, height } = Dimensions.get('window');
+  const [positions, setPositions] = useState<Record<string, { x: number; y: number }>>({});
   const simRef = useRef<d3.Simulation<NodeDatum, undefined> | null>(null);
-
-  // Shared map of positions: { [id]: { x, y } }
-  const positions = useSharedValue<Record<string, { x: number; y: number }>>({});
-
-  // Keep initial arrays stable refs (render uses these arrays for elements)
   const nodesRef = useRef(initialNodes.map(n => ({ ...n })));
   const linksRef = useRef(initialLinks.map(l => ({ ...l })));
 
+  // ViewBox state
+  const [viewBox, setViewBox] = useState({ x: 0, y: 0, width, height });
+  const viewBoxRef = useRef({ x: 0, y: 0, width, height });
+
+  // Boundary constraints - proportional to screen size
+  const BOUNDARY_MULTIPLIER = 2; // Allow panning 2x the screen size in each direction
+  const minX = -width * BOUNDARY_MULTIPLIER;
+  const minY = -height * BOUNDARY_MULTIPLIER;
+  const maxX = width * (1 + BOUNDARY_MULTIPLIER);
+  const maxY = height * (1 + BOUNDARY_MULTIPLIER);
+
+  // Use ref to always have latest boundary constraint function
+  const constrainViewBoxRef = useRef((vb: { x: number; y: number; width: number; height: number }) => vb);
+
+  // Update the ref whenever boundaries change
+  useLayoutEffect(() => {
+    constrainViewBoxRef.current = (vb: { x: number; y: number; width: number; height: number }) => {
+      const constrainedX = Math.max(minX, Math.min(maxX - vb.width, vb.x));
+      const constrainedY = Math.max(minY, Math.min(maxY - vb.height, vb.y));
+      return {
+        x: constrainedX,
+        y: constrainedY,
+        width: vb.width,
+        height: vb.height,
+      };
+    };
+  }, [minX, minY, maxX, maxY]);
+
+  // Keep viewBoxRef in sync with state - use useLayoutEffect for synchronous update
+  useLayoutEffect(() => {
+    viewBoxRef.current = viewBox;
+  }, [viewBox]);
+
+  // Gesture tracking
+  const gestureStartRef = useRef({ x: 0, y: 0, width, height, scale: 1 });
+  const isPinchingRef = useRef(false);
+  const initialPinchDistance = useRef(0);
+
+  // Initialize simulation
   useEffect(() => {
-    // initialize positions map
     const initialMap: Record<string, { x: number; y: number }> = {};
-    nodesRef.current.forEach((n, i) => {
+    nodesRef.current.forEach((n) => {
       initialMap[n.id] = {
-        x: n.x ?? width / 2 + (Math.random() - 0.5) * 20,
-        y: n.y ?? height / 2 + (Math.random() - 0.5) * 20,
+        x: n.x ?? width / 2 + (Math.random() - 0.5) * 100,
+        y: n.y ?? height / 2 + (Math.random() - 0.5) * 100,
       };
     });
-    positions.value = initialMap;
+    setPositions(initialMap);
 
-    // create a copy of nodes for simulation (d3 will mutate)
     const simNodes = nodesRef.current.map(n => ({ ...n }));
     const simLinks = linksRef.current.map(l => ({ ...l }));
 
-    // build simulation
     const sim = d3.forceSimulation(simNodes)
-      .force('link', d3.forceLink(simLinks).id((d: any) => d.id).distance(120).strength(0.8))
-      .force('charge', d3.forceManyBody().strength(-300))
-      .force('center', d3.forceCenter(width / 2, height / 2))
-      .alphaTarget(0.3)
-      .velocityDecay(0.5);
+      .force('link', d3.forceLink(simLinks).id((d: any) => d.id).distance(150).strength(1))
+      .force('charge', d3.forceManyBody().strength(-400))
+      .force('center', d3.forceCenter(width / 2, height / 2).strength(0.05))
+      .force('collision', d3.forceCollide().radius(35))
+      .force('x', d3.forceX(width / 2).strength(0.02))
+      .force('y', d3.forceY(height / 2).strength(0.02))
+      .alphaDecay(0.02)
+      .velocityDecay(0.4);
 
     sim.on('tick', () => {
-      // Update positions shared value each tick. Create a new object to ensure reactivity.
       const next: Record<string, { x: number; y: number }> = {};
+      const nodeRadius = 24;
+      const nodePadding = nodeRadius + 10;
       for (const n of simNodes) {
-        next[n.id] = { x: n.x ?? width / 2, y: n.y ?? height / 2 };
+        const x = Math.max(nodePadding, Math.min(width - nodePadding, n.x ?? width / 2));
+        const y = Math.max(nodePadding, Math.min(height - nodePadding, n.y ?? height / 2));
+        next[n.id] = { x, y };
+        n.x = x;
+        n.y = y;
       }
-      positions.value = next;
+      setPositions(next);
     });
 
     simRef.current = sim;
@@ -71,140 +100,204 @@ export default function NetworkTree({
       sim.stop();
       simRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // run once
+  }, [width, height]);
 
-  // Helper to find sim node for interactive changes
-  const findSimNode = (id: string) => {
-    if (!simRef.current) return null;
-    return (simRef.current.nodes() as NodeDatum[]).find(n => n.id === id) ?? null;
+  // Calculate distance between two touches
+  const getDistance = (touches: any[]) => {
+    if (touches.length < 2) return 0;
+    const dx = touches[0].pageX - touches[1].pageX;
+    const dy = touches[0].pageY - touches[1].pageY;
+    return Math.sqrt(dx * dx + dy * dy);
   };
 
-  // Pan & pinch shared values + styles
-  const translateX = useSharedValue(0);
-  const translateY = useSharedValue(0);
-  const scale = useSharedValue(1);
+  // PanResponder for handling touch gestures
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: (evt) => {
+        const touches = evt.nativeEvent.touches;
 
-  // Reanimated v2 gesture handlers
-  const panHandler = useAnimatedGestureHandler<PanGestureHandlerGestureEvent, { startX: number; startY: number }>(
-    {
-      onStart(_, ctx) {
-        ctx.startX = translateX.value;
-        ctx.startY = translateY.value;
+        // Use the ref values which are always current
+        gestureStartRef.current = {
+          x: viewBoxRef.current.x,
+          y: viewBoxRef.current.y,
+          width: viewBoxRef.current.width,
+          height: viewBoxRef.current.height,
+          scale: width / viewBoxRef.current.width,
+        };
+
+        if (touches.length === 2) {
+          isPinchingRef.current = true;
+          initialPinchDistance.current = getDistance(Array.from(touches));
+        } else {
+          isPinchingRef.current = false;
+          initialPinchDistance.current = 0;
+        }
       },
-      onActive(event, ctx) {
-        translateX.value = ctx.startX + event.translationX;
-        translateY.value = ctx.startY + event.translationY;
+      onPanResponderMove: (evt, gestureState) => {
+        const touches = evt.nativeEvent.touches;
+
+        if (touches.length === 2) {
+          // Pinch zoom
+          const currentDistance = getDistance(Array.from(touches));
+
+          // If we just started pinching (transitioned from 1 to 2 fingers), initialize the distance
+          if (!isPinchingRef.current) {
+            isPinchingRef.current = true;
+            initialPinchDistance.current = currentDistance;
+            // Update gesture start to current viewBox state
+            gestureStartRef.current = {
+              x: viewBoxRef.current.x,
+              y: viewBoxRef.current.y,
+              width: viewBoxRef.current.width,
+              height: viewBoxRef.current.height,
+              scale: width / viewBoxRef.current.width,
+            };
+            return; // Skip this frame to establish baseline
+          }
+
+          if (initialPinchDistance.current > 0 && currentDistance > 0) {
+            // Calculate scale change
+            const scaleRatio = currentDistance / initialPinchDistance.current;
+            const newScale = Math.max(0.5, Math.min(3, gestureStartRef.current.scale * scaleRatio));
+            const newWidth = width / newScale;
+            const newHeight = height / newScale;
+
+            // Get center point between fingers
+            const centerX = (touches[0].pageX + touches[1].pageX) / 2;
+            const centerY = (touches[0].pageY + touches[1].pageY) / 2;
+
+            // Calculate the point in viewBox coordinates at gesture start
+            const viewBoxCenterX = gestureStartRef.current.x + (centerX / width) * gestureStartRef.current.width;
+            const viewBoxCenterY = gestureStartRef.current.y + (centerY / height) * gestureStartRef.current.height;
+
+            // Keep that point centered
+            const unconstrained = {
+              x: viewBoxCenterX - (centerX / width) * newWidth,
+              y: viewBoxCenterY - (centerY / height) * newHeight,
+              width: newWidth,
+              height: newHeight,
+            };
+
+            const newViewBox = constrainViewBoxRef.current(unconstrained);
+
+            // Update ref immediately before state update
+            viewBoxRef.current = newViewBox;
+            setViewBox(newViewBox);
+          }
+        } else if (touches.length === 1) {
+          // If we were pinching but now only have 1 finger, stop pinching
+          if (isPinchingRef.current) {
+            isPinchingRef.current = false;
+            initialPinchDistance.current = 0;
+            // Update gesture start to current viewBox for smooth transition to pan
+            gestureStartRef.current = {
+              x: viewBoxRef.current.x,
+              y: viewBoxRef.current.y,
+              width: viewBoxRef.current.width,
+              height: viewBoxRef.current.height,
+              scale: width / viewBoxRef.current.width,
+            };
+            return; // Skip this frame
+          }
+          // Pan - use gestureState which gives us total movement from start
+          const scale = gestureStartRef.current.width / width;
+
+          const unconstrained = {
+            x: gestureStartRef.current.x - gestureState.dx * scale,
+            y: gestureStartRef.current.y - gestureState.dy * scale,
+            width: gestureStartRef.current.width,
+            height: gestureStartRef.current.height,
+          };
+
+          const newViewBox = constrainViewBoxRef.current(unconstrained);
+
+          // Update ref immediately before state update
+          viewBoxRef.current = newViewBox;
+          setViewBox(newViewBox);
+        }
       },
-    }
-  );
-
-  const pinchHandler = useAnimatedGestureHandler<PinchGestureHandlerGestureEvent, { startScale: number }>(
-    {
-      onStart(_, ctx) {
-        ctx.startScale = scale.value;
+      onPanResponderRelease: () => {
+        // Don't update ref here - it's already been updated during Move
+        // Updating it here with state value can cause jumping due to React closure
+        isPinchingRef.current = false;
+        initialPinchDistance.current = 0;
       },
-      onActive(event, ctx) {
-        const s = ctx.startScale * event.scale;
-        scale.value = Math.min(Math.max(s, 0.5), 3);
-      },
-    }
-  );
-
-  // useAnimatedStyle applied to wrapper to pan/zoom the whole SVG
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateX: translateX.value },
-      { translateY: translateY.value },
-      { scale: scale.value },
-    ],
-  }));
-
-  // Node press: briefly fix node near center (interact with simulation)
-  const handleNodePress = (id: string) => {
-    const node = findSimNode(id);
-    if (!node || !simRef.current) return;
-    node.fx = width / 2 + (Math.random() - 0.5) * 40;
-    node.fy = height / 2 + (Math.random() - 0.5) * 40;
-    simRef.current.alpha(0.7).restart();
-    setTimeout(() => {
-      delete node.fx;
-      delete node.fy;
-      simRef.current && simRef.current.alphaTarget(0.01);
-    }, 800);
-  };
-
-  // Animated props for a node (circle)
-  const makeNodeProps = (id: string) =>
-    useAnimatedProps(() => {
-      const p = positions.value[id] ?? { x: width / 2, y: height / 2 };
-      // Animated SVG props expect numbers (not transforms)
-      return { cx: p.x, cy: p.y } as any;
-    });
-
-  // Animated props for node label
-  const makeLabelProps = (id: string) =>
-    useAnimatedProps(() => {
-      const p = positions.value[id] ?? { x: width / 2, y: height / 2 };
-      return { x: p.x + 28, y: p.y + 6 } as any;
-    });
-
-  // Animated props for link
-  const makeLinkProps = (sourceId: string, targetId: string) =>
-    useAnimatedProps(() => {
-      const s = positions.value[sourceId] ?? { x: width / 2, y: height / 2 };
-      const t = positions.value[targetId] ?? { x: width / 2, y: height / 2 };
-      return { x1: s.x, y1: s.y, x2: t.x, y2: t.y } as any;
-    });
+    })
+  ).current;
 
   return (
-    <View style={styles.container}>
-      <PanGestureHandler onGestureEvent={panHandler}>
-        <Animated.View style={{ flex: 1 }}>
-          <PinchGestureHandler onGestureEvent={pinchHandler}>
-            <Animated.View style={[{ flex: 1 }, animatedStyle]}>
-              <Svg width={width} height={height}>
-                {/* links */}
-                {linksRef.current.map((l, i) => {
-                  const animProps = makeLinkProps((l as any).source, (l as any).target);
-                  return (
-                    <AnimatedLine
-                      key={`link-${i}`}
-                      animatedProps={animProps}
-                      stroke="#cbd5e1"
-                      strokeWidth={1.2}
-                      strokeOpacity={0.9}
-                    />
-                  );
-                })}
+    <View style={styles.container} {...panResponder.panHandlers}>
+      <Svg
+        width={width}
+        height={height}
+        viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.width} ${viewBox.height}`}
+      >
+        <G>
+          {/* Links */}
+          {linksRef.current.map((l, i) => {
+            const sourceId = typeof l.source === 'string' ? l.source : (l.source as any).id;
+            const targetId = typeof l.target === 'string' ? l.target : (l.target as any).id;
+            const sourcePos = positions[sourceId];
+            const targetPos = positions[targetId];
 
-                {/* nodes & labels */}
-                {nodesRef.current.map(n => {
-                  const nodeAnim = makeNodeProps(n.id);
-                  const labelAnim = makeLabelProps(n.id);
-                  return (
-                    <React.Fragment key={n.id}>
-                      <AnimatedCircle
-                        animatedProps={nodeAnim}
-                        r={20}
-                        fill="#2979ff"
-                        onPress={() => handleNodePress(n.id)}
-                      />
-                      <AnimatedText
-                        animatedProps={labelAnim}
-                        fontSize={12}
-                        fill="#0f172a"
-                      >
-                        {n.name ?? n.id}
-                      </AnimatedText>
-                    </React.Fragment>
-                  );
-                })}
-              </Svg>
-            </Animated.View>
-          </PinchGestureHandler>
-        </Animated.View>
-      </PanGestureHandler>
+            if (!sourcePos || !targetPos) return null;
+
+            return (
+              <Line
+                key={`link-${i}`}
+                x1={sourcePos.x}
+                y1={sourcePos.y}
+                x2={targetPos.x}
+                y2={targetPos.y}
+                stroke="#cbd5e1"
+                strokeWidth={2}
+                strokeOpacity={0.6}
+              />
+            );
+          })}
+
+          {/* Nodes and labels */}
+          {nodesRef.current.map(n => {
+            const pos = positions[n.id];
+            if (!pos) return null;
+
+            return (
+              <G key={n.id}>
+                <Circle
+                  cx={pos.x}
+                  cy={pos.y}
+                  r={24}
+                  fill="#585ABF"
+                  stroke="#fff"
+                  strokeWidth={3}
+                />
+                <Text
+                  x={pos.x}
+                  y={pos.y}
+                  fontSize={14}
+                  fontWeight="600"
+                  fill="#fff"
+                  textAnchor="middle"
+                  alignmentBaseline="central"
+                >
+                  {(n.name ?? n.id).substring(0, 1).toUpperCase()}
+                </Text>
+                <Text
+                  x={pos.x}
+                  y={pos.y + 40}
+                  fontSize={12}
+                  fill="#0f172a"
+                  textAnchor="middle"
+                >
+                  {n.name ?? n.id}
+                </Text>
+              </G>
+            );
+          })}
+        </G>
+      </Svg>
     </View>
   );
 }

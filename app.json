@@ -47,7 +47,7 @@
         "expo-splash-screen",
         {
           "image": "./assets/icons/splash-icon-light.png",
-          "dark":{
+          "dark": {
             "image": "./assets/icons/splash-icon-dark.png",
             "backgroundColor": "070c1f"
           },
@@ -55,7 +55,8 @@
           "resizeMode": "contain",
           "backgroundColor": "#ffffff"
         }
-      ]
+      ],
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true

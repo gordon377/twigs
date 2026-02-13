@@ -52,6 +52,16 @@ const createTodayValue = (): string => {
   }
 };
 
+// Helper to calculate number of weeks in a month
+const getWeeksInMonth = (year: number, month: number): number => {
+  const firstDay = new Date(year, month - 1, 1);
+  const lastDay = new Date(year, month, 0);
+  const firstDayOfWeek = firstDay.getDay();
+  const daysInMonth = lastDay.getDate();
+  const totalDays = firstDayOfWeek + daysInMonth;
+  return Math.ceil(totalDays / 7);
+};
+
 interface UIState {
   showOptionsDropdown: boolean;
   showSearchModal: boolean;
@@ -233,14 +243,29 @@ export default function CalendarScreen() {
 
   const responsiveHeights = useMemo(() => {
     const { height } = screenDimensions;
-    return {
-      minHeight: height * 0.30,
-      maxHeight: height * 0.75,
-      defaultHeight: height * 0.30,
-    };
-  }, [screenDimensions]);
+    const calendarHeight = height * 0.42; // Fixed height, tall enough for 6-week months
 
-  const { minHeight, maxHeight, defaultHeight } = responsiveHeights;
+    // Calculate weeks in current month
+    const [year, month] = selectedDate.split('-').map(Number);
+    const weeks = getWeeksInMonth(year, month);
+
+    // Adjust minHeight based on weeks: 4 weeks → 50%, 5 weeks → 45%, 6 weeks → 40%
+    let minHeightPercentage = 0.50; // Default for 4 weeks
+    if (weeks === 5) {
+      minHeightPercentage = 0.45;
+    } else if (weeks === 6) {
+      minHeightPercentage = 0.40;
+    }
+
+    return {
+      calendarHeight: calendarHeight,
+      minHeight: height * minHeightPercentage,
+      maxHeight: height * 0.75,
+      defaultHeight: height * minHeightPercentage, // Match minHeight for consistency
+    };
+  }, [screenDimensions, selectedDate]);
+
+  const { calendarHeight, minHeight, maxHeight, defaultHeight } = responsiveHeights;
 
   const hasEvents = useMemo(() => {
     return hasEventsOnDate(selectedDate);
@@ -330,6 +355,12 @@ export default function CalendarScreen() {
   const lastTapRef = useRef<number>(0);
 
   const handleDatePress = useCallback((date: string) => {
+    // Don't trigger double-tap detection during "Back to Today" navigation
+    if (isNavigatingToToday) {
+      setSelectedDate(date);
+      return;
+    }
+
     const now = Date.now();
     if (lastTapRef.current && now - lastTapRef.current < 300) {
       setSelectedDate(date);
@@ -347,7 +378,7 @@ export default function CalendarScreen() {
       lastTapRef.current = now;
     }
     console.log('Selected date changed to:', date);
-  }, [zoomAnim]);
+  }, [zoomAnim, isNavigatingToToday]);
 
   const handlePageChange = useCallback((event: any) => {
     const newPage = event.nativeEvent.position;
@@ -360,6 +391,9 @@ export default function CalendarScreen() {
 
   const navigateToToday = useCallback(async () => {
     if (isNavigatingToToday || isGesturingRef.current) return;
+
+    // Reset double-tap timer to prevent big calendar from opening
+    lastTapRef.current = 0;
 
     updateUIState({
       isNavigatingToToday: true,
@@ -378,8 +412,18 @@ export default function CalendarScreen() {
         await new Promise(resolve => setTimeout(resolve, 150));
       }
 
-      const hasEventsToday = hasEventsOnDate(today);
-      const targetHeight = hasEventsToday ? defaultHeight : minHeight;
+      // Calculate target height based on TODAY's month, not current month
+      const [todayYear, todayMonth] = today.split('-').map(Number);
+      const todayWeeks = getWeeksInMonth(todayYear, todayMonth);
+
+      let todayMinHeightPercentage = 0.50; // Default for 4 weeks
+      if (todayWeeks === 5) {
+        todayMinHeightPercentage = 0.45;
+      } else if (todayWeeks === 6) {
+        todayMinHeightPercentage = 0.40;
+      }
+
+      const targetHeight = screenDimensions.height * todayMinHeightPercentage;
 
       const calendarPromise = calendarRef.current?.backToToday() || Promise.resolve();
 
@@ -412,9 +456,7 @@ export default function CalendarScreen() {
     }
   }, [
     today,
-    hasEventsOnDate,
-    defaultHeight,
-    minHeight,
+    screenDimensions.height,
     eventsListHeight,
     isNavigatingToToday,
     currentPage,
@@ -667,11 +709,12 @@ export default function CalendarScreen() {
 
   const CalendarPage = useMemo(() => (
     <View style={styles.pageContainer}>
-      <View style={styles.calendarContainer}>
+      <View style={[styles.calendarWrapper, { height: calendarHeight }]}>
         <SingleDateCalendar
           ref={calendarRef}
           selectedDate={selectedDate}
           setSelectedDate={handleDatePress}
+          calendarHeight={calendarHeight}
         />
       </View>
       <View style={styles.eventsGestureContainer}>
@@ -692,7 +735,7 @@ export default function CalendarScreen() {
         </Animated.View>
       </View>
     </View>
-  ), [selectedDate, handleDatePress, eventsListHeight, panResponder.panHandlers]);
+  ), [selectedDate, handleDatePress, eventsListHeight, panResponder.panHandlers, calendarHeight]);
 
   const AllEventsPage = useMemo(() => (
     <Suspense fallback={<LazyLoadingIndicator />}>
@@ -816,43 +859,37 @@ const styles = StyleSheet.create({
     paddingTop: 0,
     backgroundColor: colors.background,
   },
-  calendarContainer: {
-    backgroundColor: colors.background,
-    borderRadius: 20,
-    margin: 16,
-    marginBottom: 0,
-    padding: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 2,
+  calendarWrapper: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 1,
   },
   eventsGestureContainer: {
     position: 'absolute',
-    bottom: 0,
     left: 0,
     right: 0,
+    bottom: 0,
     zIndex: 10,
   },
   eventsListContainer: {
     backgroundColor: colors.white,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 8,
+    shadowOffset: { width: 0, height: -1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
     overflow: 'hidden',
   },
   dragHandle: {
     alignItems: 'center',
-    paddingVertical: 16,
+    paddingVertical: 12,
     paddingHorizontal: 20,
     backgroundColor: colors.white,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.divider,
+    borderBottomWidth: 0,
   },
   dragHandleBackground: {
     position: 'absolute',

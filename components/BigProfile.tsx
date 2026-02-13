@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity, Button, Alert, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { sendConnectionRequest } from '@/utils/api';
+import { useProfile } from '@/contexts/ProfileContext';
 
 export type BigProfileProps = {
   username?: string;
@@ -23,6 +24,11 @@ const BigProfile: React.FC<BigProfileProps> = ({
   onClose
 }) => {
   const [loading, setLoading] = useState(false);
+  const { profileData } = useProfile();
+
+  // Check if viewing own profile - check both top level and nested data object
+  const currentUserId = profileData?.user_id || profileData?.data?.user_id;
+  const isOwnProfile = userId && currentUserId && userId === currentUserId;
 
   const handleConnect = async () => {
     if (!userId) {
@@ -65,20 +71,22 @@ const BigProfile: React.FC<BigProfileProps> = ({
           <Text style={styles.infoLabel}>Bio</Text>
           <Text style={styles.infoText}>{bio || 'No bio provided.'}</Text>
         </View>
-        {/* Connection Request Button */}
-        <View style={styles.buttonContainer}>
-          <TouchableOpacity
-            style={styles.connectButton}
-            onPress={handleConnect}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.connectButtonText}>Send Connection Request</Text>
-            )}
-          </TouchableOpacity>
-        </View>
+        {/* Connection Request Button - Only show if not viewing own profile */}
+        {!isOwnProfile && (
+          <View style={styles.buttonContainer}>
+            <TouchableOpacity
+              style={styles.connectButton}
+              onPress={handleConnect}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.connectButtonText}>Send Connection Request</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
     </View>
   );
