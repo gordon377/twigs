@@ -1,50 +1,70 @@
-# Welcome to your Expo app 👋
+# Twigs
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Twigs is a cross-platform mobile app aimed at facilitating logistics between day-to-day interpersonal contacts. It is built with **Expo** and **React Native**, using **Expo Router** for file-based navigation. The app includes an authentication flow (sign up / log in), a tab-based UI, profile management screens, a discover/search experience, and a calendar/events area.
 
-## Get started
+> Tech stack: Expo (SDK 53), React Native, TypeScript, Expo Router, EAS Build/Updates.
 
-1. Install dependencies
+---
 
-   ```bash
-   npm install
-   ```
+## Features (current in repo)
 
-2. Start the app
+### Authentication / onboarding
+- Create account flow:
+  - Enter email (`app/index.tsx`)
+  - Set password (`app/signUpPassword.tsx`)
+  - Set up profile info (`app/signUpUser.tsx`)
+- Log in screen (`app/logIn.tsx`)
+- Uses `expo-secure-store` for storing credentials/tokens (see usage in auth screens and `utils/api` integration).
 
-   ```bash
-    npx expo start
-   ```
+### App navigation (Expo Router)
+- File-based routing via the `app/` directory
+- Tab navigation configured in `app/(tabs)/_layout.tsx`
+  - Home (`app/(tabs)/home.tsx`)
+  - Discover (`app/(tabs)/discover.tsx`)
+  - Calendar (`app/(tabs)/calendar/*`)
+  - Network (`app/(tabs)/network.tsx`)
+  - Profile (`app/(tabs)/profile/*`)
 
-In the output, you'll find options to open the app in a
+### Discover
+- Profile search UI with debounce (`app/(tabs)/discover.tsx`)
+- Calls `searchProfiles` from `@/utils/api`
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+### Calendar / Events
+Calendar screens live in `app/(tabs)/calendar/` including:
+- `index.tsx` (calendar view)
+- `createEvent.tsx`
+- `eventDetails.tsx`
+- `manageCalendars.tsx`
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+### Profile
+Profile screens live in `app/(tabs)/profile/` including:
+- `index.tsx`
+- `settings.tsx`
+- `manageAccount.tsx`
+- Edit flows: `editEmail.tsx`, `editPassword.tsx`, `editUser.tsx`, `editCredentials.tsx`
+- `about.tsx`
 
-## Get a fresh project
+---
 
-When you're ready, run:
+## Project structure
 
-```bash
-npm run reset-project
-```
-
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
-
-## Learn more
-
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+```text
+.
+├── app/                      # Expo Router routes (file-based navigation)
+│   ├── (tabs)/                # Tab group
+│   ├── _layout.tsx            # Root router layout
+│   ├── +not-found.tsx         # Not found route
+│   ├── index.tsx              # Entry screen (sign-up email)
+│   ├── logIn.tsx              # Log-in screen
+│   ├── signUpPassword.tsx     # Sign-up password step
+│   └── signUpUser.tsx         # Sign-up profile step
+├── components/                # Reusable UI components
+├── contexts/                  # React context providers (e.g., ProfileContext)
+├── hooks/                     # Custom hooks
+├── schemas/                   # Validation schemas (valibot)
+├── styles/                    # Styling helpers
+├── utils/                     # API helpers and general utilities
+├── assets/                    # Images, icons, SVGs, etc.
+├── app.json                   # Expo config
+├── eas.json                   # EAS build profiles
+└── tsconfig.json              # TypeScript config
